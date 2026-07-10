@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Vollkorn:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{
     --paper:#ECE4D3;
@@ -227,6 +228,10 @@
 
   footer{margin-top:22px;text-align:center;font-size:11.5px;color:var(--ink-faint);}
 
+  /* ---------- Export snapshot ---------- */
+  .export-section{margin-bottom:26px;}
+  .export-section:last-child{margin-bottom:0;}
+
   @media (max-width:640px){
     .chips{grid-template-columns:repeat(2,1fr);}
     header.top{flex-direction:column;align-items:flex-start;}
@@ -312,17 +317,19 @@
     </div>
   </div>
 
-  <div class="section-title">Metrics</div>
-  <div class="grid" id="grid"></div>
+  <div id="exportZone">
+    <div class="section-title" id="metricsSectionTitle">Metrics</div>
+    <div class="grid" id="grid"></div>
 
-  <div class="topad" id="topAdCard">
-    <div class="label">Top Performing Ad — by orders/conversions</div>
-    <div class="topad-grid" id="topAdGrid"></div>
-  </div>
+    <div class="topad" id="topAdCard">
+      <div class="label">Top Performing Ad — by orders/conversions</div>
+      <div class="topad-grid" id="topAdGrid"></div>
+    </div>
 
-  <div class="topad" id="topProductCard">
-    <div class="label">Top Selling Product — by units sold</div>
-    <div class="topad-grid" id="topProductGrid"></div>
+    <div class="topad" id="topProductCard">
+      <div class="label">Top Selling Product — by units sold</div>
+      <div class="topad-grid" id="topProductGrid"></div>
+    </div>
   </div>
 
   <details class="methodology">
@@ -757,43 +764,38 @@ function fmtDelta(d){
 }
 
 /* ================= Rendering ================= */
-function buildGrid(columns){
-  const grid = document.getElementById('grid');
+function metricCellHTML(def, col){
+  if (col.isDelta){
+    return fmtDelta(computeDelta(def.key, col.to, col.from));
+  }
+  const val = col.metrics[def.key];
+  const warn = def.warnKey && col.metrics[def.warnKey];
+  return def.fmt(val) + (warn ? '<sup title="Date range extends earlier than your accumulated order history">✦</sup>' : '');
+}
+
+function gridHTML(columns){
   const n = columns.length;
-  grid.innerHTML = METRIC_DEFS.map(def => `
+  return METRIC_DEFS.map(def => `
     <div class="card" data-metric="${def.key}">
       <div class="label">${def.label}</div>
       <div class="values" style="grid-template-columns:repeat(${n},1fr);">
-        ${columns.map((col,i)=>`
+        ${columns.map(col=>`
           <div class="value-col">
             <span class="vlabel">${escapeHTML(col.label)}</span>
-            <span class="vnum${col.isDelta?' delta':''}" data-col="${i}">—</span>
+            <span class="vnum${col.isDelta?' delta':''}">${metricCellHTML(def,col)}</span>
           </div>
         `).join('')}
       </div>
     </div>
   `).join('');
-
-  METRIC_DEFS.forEach(def=>{
-    const card = document.querySelector(`[data-metric="${def.key}"]`);
-    columns.forEach((col,i)=>{
-      const el = card.querySelector(`[data-col="${i}"]`);
-      if (col.isDelta){
-        el.innerHTML = fmtDelta(computeDelta(def.key, col.to, col.from));
-      } else {
-        const val = col.metrics[def.key];
-        const warn = def.warnKey && col.metrics[def.warnKey];
-        el.innerHTML = def.fmt(val) + (warn ? '<sup title="Date range extends earlier than your accumulated order history">✦</sup>' : '');
-      }
-    });
-  });
 }
 
-function renderTopAd(columns){
-  const cols = columns.filter(c=>!c.isDelta);
-  const grid = document.getElementById('topAdGrid');
-  grid.style.gridTemplateColumns = `repeat(${cols.length},1fr)`;
-  grid.innerHTML = cols.map(col=>{
+function buildGrid(columns){
+  document.getElementById('grid').innerHTML = gridHTML(columns);
+}
+
+function topAdColsHTML(cols){
+  return cols.map(col=>{
     const m = col.metrics;
     if (!m.topAd){
       return `<div class="topad-period"><span class="vlabel">${escapeHTML(col.label)}</span><div class="topad-empty">No ad activity in range</div></div>`;
@@ -808,11 +810,15 @@ function renderTopAd(columns){
   }).join('');
 }
 
-function renderTopProduct(columns){
+function renderTopAd(columns){
   const cols = columns.filter(c=>!c.isDelta);
-  const grid = document.getElementById('topProductGrid');
+  const grid = document.getElementById('topAdGrid');
   grid.style.gridTemplateColumns = `repeat(${cols.length},1fr)`;
-  grid.innerHTML = cols.map(col=>{
+  grid.innerHTML = topAdColsHTML(cols);
+}
+
+function topProductColsHTML(cols){
+  return cols.map(col=>{
     const m = col.metrics;
     if (!m.topProduct){
       return `<div class="topad-period"><span class="vlabel">${escapeHTML(col.label)}</span><div class="topad-empty">No orders in range</div></div>`;
@@ -826,6 +832,31 @@ function renderTopProduct(columns){
   }).join('');
 }
 
+function renderTopProduct(columns){
+  const cols = columns.filter(c=>!c.isDelta);
+  const grid = document.getElementById('topProductGrid');
+  grid.style.gridTemplateColumns = `repeat(${cols.length},1fr)`;
+  grid.innerHTML = topProductColsHTML(cols);
+}
+
+function metricsSectionHTML(sectionTitle, columns){
+  const cols = columns.filter(c=>!c.isDelta);
+  return `
+    <div class="export-section">
+      <div class="section-title" style="margin-top:0;">${escapeHTML(sectionTitle)}</div>
+      <div class="grid">${gridHTML(columns)}</div>
+      <div class="topad">
+        <div class="label">Top Performing Ad — by orders/conversions</div>
+        <div class="topad-grid" style="grid-template-columns:repeat(${cols.length},1fr);">${topAdColsHTML(cols)}</div>
+      </div>
+      <div class="topad">
+        <div class="label">Top Selling Product — by units sold</div>
+        <div class="topad-grid" style="grid-template-columns:repeat(${cols.length},1fr);">${topProductColsHTML(cols)}</div>
+      </div>
+    </div>
+  `;
+}
+
 function escapeHTML(s){
   return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -836,6 +867,7 @@ function renderAll(){
 
   document.getElementById('todayLabel').textContent = new Date(today+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
   document.getElementById('rangeLabel').textContent = columns.filter(c=>!c.isDelta).map(c=>`${c.label}: ${c.sub}`).join('  ·  ');
+  document.getElementById('metricsSectionTitle').textContent = `Metrics — ${viewLabelFor(viewState.mode, columns)}`;
 
   buildGrid(columns);
   renderTopAd(columns);
@@ -868,64 +900,14 @@ function renderChips(){
   }).join('');
 }
 
-/* ================= CSV export ================= */
-function rawMetricValue(key, val){
-  if (val==null) return '';
-  if (key==='revenue') return Math.round(val);
-  if (key==='pounds') return Number(val).toFixed(1);
-  if (key==='aov' || key==='pricePerLb' || key==='cac') return Number(val).toFixed(2);
-  return val;
+/* ================= Screenshot export ================= */
+function viewLabelFor(mode, columns){
+  if (mode==='compare') return 'Compare: '+columns.filter(c=>!c.isDelta).map(c=>c.label).join(' vs ');
+  if (mode==='custom') return 'Custom Range: '+columns[0].sub;
+  return 'Standard (Daily / WTD / MTD)';
 }
 
-function buildMetricsRows(columns){
-  const rows = [['Metric', ...columns.map(c=>c.label)]];
-  for (const def of METRIC_DEFS){
-    const row = [def.label];
-    for (const col of columns){
-      if (col.isDelta){
-        const d = computeDelta(def.key, col.to, col.from);
-        if (!d) row.push('');
-        else if (d.dir==='new') row.push('New');
-        else row.push(`${d.dir==='up'?'+':d.dir==='down'?'-':''}${Math.abs(d.pct).toFixed(1)}%`);
-      } else {
-        row.push(rawMetricValue(def.key, col.metrics[def.key]));
-      }
-    }
-    rows.push(row);
-  }
-  return rows;
-}
-
-function buildTopAdRows(columns){
-  const rows = [[], ['Top Performing Ad'], ['Period','Ad Name','Results','Spend ($)']];
-  for (const col of columns.filter(c=>!c.isDelta)){
-    const ad = col.metrics.topAd;
-    rows.push([col.label, ad?ad.name:'', ad?ad.results:'', ad?Math.round(ad.spend):'']);
-  }
-  return rows;
-}
-
-function buildTopProductRows(columns){
-  const rows = [[], ['Top Selling Product'], ['Period','Product','Units Sold','Pounds']];
-  for (const col of columns.filter(c=>!c.isDelta)){
-    const p = col.metrics.topProduct;
-    rows.push([col.label, p?p.name:'', p?p.units:'', p?p.pounds.toFixed(1):'']);
-  }
-  return rows;
-}
-
-function csvCell(v){
-  if (v==null) return '';
-  const s = String(v);
-  return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
-}
-
-function toCSV(rows){
-  return rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
-}
-
-function downloadCSV(filename, rows){
-  const blob = new Blob([toCSV(rows)], {type:'text/csv;charset=utf-8;'});
+function downloadBlob(blob, filename){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -934,49 +916,38 @@ function downloadCSV(filename, rows){
   URL.revokeObjectURL(url);
 }
 
-function viewLabelFor(mode, columns){
-  if (mode==='compare') return 'Compare: '+columns.filter(c=>!c.isDelta).map(c=>c.label).join(' vs ');
-  if (mode==='custom') return 'Custom Range: '+columns[0].sub;
-  return 'Standard (Daily / WTD / MTD)';
+function canvasToPNG(canvas, filename){
+  return new Promise(resolve=>{
+    canvas.toBlob(blob=>{
+      downloadBlob(blob, filename);
+      resolve();
+    }, 'image/png');
+  });
 }
 
-function downloadCurrentView(){
-  const columns = getColumnsForMode();
-  const rows = [
-    [`4 Diamond Ranch — ${viewLabelFor(viewState.mode, columns)}`],
-    [`Generated ${todayISO()}`],
-    [],
-    ...buildMetricsRows(columns),
-    ...buildTopAdRows(columns),
-    ...buildTopProductRows(columns),
-  ];
-  downloadCSV(`4dr-metrics-${viewState.mode}-${todayISO()}.csv`, rows);
+async function downloadCurrentView(){
+  const zone = document.getElementById('exportZone');
+  const canvas = await html2canvas(zone, {backgroundColor:'#ECE4D3', scale:2});
+  await canvasToPNG(canvas, `4dr-metrics-${viewState.mode}-${todayISO()}.png`);
 }
 
-function downloadDailyReport(){
+async function downloadDailyReport(){
   const standardCols = getColumnsForMode('standard');
   const ydayCols = getColumnsForMode('compare','ydayVsPrior');
   const weekCols = getColumnsForMode('compare','weekVsLast');
-  const rows = [
-    ['4 Diamond Ranch — Daily Report'],
-    [`Generated ${todayISO()}`],
-    [],
-    ['=== STANDARD (Daily / WTD / MTD) ==='],
-    ...buildMetricsRows(standardCols),
-    ...buildTopAdRows(standardCols),
-    ...buildTopProductRows(standardCols),
-    [],
-    ['=== COMPARE: YESTERDAY VS DAY BEFORE ==='],
-    ...buildMetricsRows(ydayCols),
-    ...buildTopAdRows(ydayCols),
-    ...buildTopProductRows(ydayCols),
-    [],
-    ['=== COMPARE: THIS WEEK VS LAST WEEK ==='],
-    ...buildMetricsRows(weekCols),
-    ...buildTopAdRows(weekCols),
-    ...buildTopProductRows(weekCols),
-  ];
-  downloadCSV(`4dr-daily-report-${todayISO()}.csv`, rows);
+
+  const container = document.createElement('div');
+  container.style.cssText = 'position:absolute;left:-9999px;top:0;width:1180px;background:#ECE4D3;padding:28px;font-family:Vollkorn,serif;';
+  container.innerHTML = `
+    <div class="section-title" style="margin-top:0;">4 Diamond Ranch — Daily Report — ${todayISO()}</div>
+    ${metricsSectionHTML('Standard (Daily / WTD / MTD)', standardCols)}
+    ${metricsSectionHTML('Compare: Yesterday vs Day Before', ydayCols)}
+    ${metricsSectionHTML('Compare: This Week vs Last Week', weekCols)}
+  `;
+  document.body.appendChild(container);
+  const canvas = await html2canvas(container, {backgroundColor:'#ECE4D3', scale:2});
+  document.body.removeChild(container);
+  await canvasToPNG(canvas, `4dr-daily-report-${todayISO()}.png`);
 }
 
 /* ================= Event wiring ================= */

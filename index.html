@@ -6,7 +6,7 @@
 <title>4 Diamond Ranch — Operations Ledger</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Vollkorn:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
   :root{
@@ -34,7 +34,7 @@
       radial-gradient(circle at 1px 1px, rgba(37,29,21,0.035) 1px, transparent 0);
     background-size:22px 22px;
     color:var(--ink);
-    font-family:'Inter',sans-serif;
+    font-family:'Vollkorn',serif;
     line-height:1.45;
     padding:28px 20px 60px;
   }
@@ -124,13 +124,13 @@
   .segmented{display:inline-flex;border:1px solid var(--rule);border-radius:var(--radius);overflow:hidden;}
   .segmented button{
     border:none;background:var(--surface);color:var(--ink-soft);font-size:12px;padding:6px 12px;
-    cursor:pointer;font-family:'Inter',sans-serif;font-weight:500;
+    cursor:pointer;font-family:'Vollkorn',serif;font-weight:500;
   }
   .segmented button.active{background:var(--brand);color:#fff;}
   .btn{
     border:1px solid var(--rule);background:var(--surface);color:var(--ink);
     padding:6px 13px;border-radius:var(--radius);font-size:12px;cursor:pointer;
-    font-family:'Inter',sans-serif;font-weight:500;
+    font-family:'Vollkorn',serif;font-weight:500;
   }
   .btn:hover{border-color:var(--brand);}
   .btn.danger{color:var(--brand-ink);}
@@ -316,6 +316,11 @@
     <div class="topad-grid" id="topAdGrid"></div>
   </div>
 
+  <div class="topad" id="topProductCard">
+    <div class="label">Top Selling Product — by units sold</div>
+    <div class="topad-grid" id="topProductGrid"></div>
+  </div>
+
   <details class="methodology">
     <summary>Methodology &amp; data notes</summary>
     <ul>
@@ -325,6 +330,7 @@
       <li><b>New / Repeat Customers</b> are real counts, built by tracking each customer's email across every Orders export you've uploaded and flagging their earliest known order as "New." Comped orders don't count toward either bucket. Accuracy improves as more days accumulate — a customer with history before you started using this dashboard may show as "New" the first time they're seen here.</li>
       <li><b>Customer Acquisition Cost</b> = Meta ad spend for the period ÷ New Customers for the same period.</li>
       <li><b>Top Performing Ad</b> = highest number of Results (conversions) in the period, from your Meta Ads-by-day export. Ties break toward lower spend.</li>
+      <li><b>Top Selling Product</b> = highest units sold in the period, from your Orders export line items (grouped by product/variant name). Comped orders count since real product still shipped; cancelled orders are excluded.</li>
       <li>Your Orders export is a rolling window (not full history), so pounds/customer data is stored locally in this browser and merged in day over day, deduped by order number. Use <b>Backup data</b> periodically as a safety net — it saves everything to a file you can restore from.</li>
       <li>A small <sup style="color:#A97C2F">✦</sup> next to a number means the date range extends earlier than your accumulated order history — that figure may be incomplete for the earliest days in range.</li>
     </ul>
@@ -473,7 +479,8 @@ function parseOrdersExport(rows){
     if (row['Cancelled at']) o.cancelledAt = row['Cancelled at'];
     const qty = Number(row['Lineitem quantity'])||0;
     const sku = (row['Lineitem sku']||'').trim();
-    if (sku && qty) o.lineItems.push({sku,qty});
+    const liName = (row['Lineitem name']||'').trim();
+    if (qty && (sku||liName)) o.lineItems.push({sku,qty,name:liName});
   }
   return Object.values(byName).map(o=>({
     ...o,
@@ -645,11 +652,29 @@ function computeMetrics(start,end){
   }
   const cac = newCustomers>0 ? adSpend/newCustomers : null;
 
+  const productTotals = {};
+  for (const o of inRange){
+    for (const li of o.lineItems){
+      const key = li.name || li.sku;
+      if (!key) continue;
+      if (!productTotals[key]) productTotals[key] = {units:0, pounds:0};
+      productTotals[key].units += li.qty;
+      productTotals[key].pounds += (state.catalog[li.sku]||0)*li.qty;
+    }
+  }
+  let topProduct=null;
+  for (const name of Object.keys(productTotals)){
+    const t = productTotals[name];
+    if (!topProduct || t.units>topProduct.units){
+      topProduct = {name, units:t.units, pounds:t.pounds};
+    }
+  }
+
   const earliestOrderDate = allValid.reduce((min,o)=>(!min||o.date<min)?o.date:min, null);
   const partial = !!(earliestOrderDate && start<earliestOrderDate);
   const ordersPartial = partial; // orders count correction depends on same accumulated data
 
-  return {revenue,orders,pounds,aov,pricePerLb,newCustomers,repeatCustomers,adSpend,cac,topAd,partial,ordersPartial};
+  return {revenue,orders,pounds,aov,pricePerLb,newCustomers,repeatCustomers,adSpend,cac,topAd,topProduct,partial,ordersPartial};
 }
 
 function rangeLabelStr(start,end){
@@ -769,6 +794,24 @@ function renderTopAd(columns){
   }).join('');
 }
 
+function renderTopProduct(columns){
+  const cols = columns.filter(c=>!c.isDelta);
+  const grid = document.getElementById('topProductGrid');
+  grid.style.gridTemplateColumns = `repeat(${cols.length},1fr)`;
+  grid.innerHTML = cols.map(col=>{
+    const m = col.metrics;
+    if (!m.topProduct){
+      return `<div class="topad-period"><span class="vlabel">${escapeHTML(col.label)}</span><div class="topad-empty">No orders in range</div></div>`;
+    }
+    const p = m.topProduct;
+    return `<div class="topad-period">
+      <span class="vlabel">${escapeHTML(col.label)}</span>
+      <div class="topad-name"><span class="ribbon">Top</span>${escapeHTML(p.name)}</div>
+      <div class="topad-stats"><b>${fmtNumber(p.units)}</b> units sold${p.pounds>0?` · <b>${fmtLb(p.pounds)}</b>`:''}</div>
+    </div>`;
+  }).join('');
+}
+
 function escapeHTML(s){
   return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -782,6 +825,7 @@ function renderAll(){
 
   buildGrid(columns);
   renderTopAd(columns);
+  renderTopProduct(columns);
   renderChips();
 }
 

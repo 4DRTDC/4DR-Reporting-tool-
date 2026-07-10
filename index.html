@@ -290,6 +290,9 @@
       <label>To <input type="date" id="customEnd"></label>
       <button class="btn" id="customApply">Apply</button>
     </div>
+    <div class="group">
+      <button class="btn" id="downloadViewBtn">Download Current View</button>
+    </div>
   </div>
 
   <div class="settingsbar">
@@ -301,6 +304,7 @@
       </div>
     </div>
     <div class="group">
+      <button class="btn" id="downloadDailyReportBtn">Download Daily Report</button>
       <button class="btn" id="backupBtn">Backup data</button>
       <button class="btn" id="restoreBtn">Restore data</button>
       <input type="file" id="restoreInput" accept=".json" style="display:none">
@@ -330,7 +334,7 @@
       <li><b>New / Repeat Customers</b> are real counts, built by tracking each customer's email across every Orders export you've uploaded and flagging their earliest known order as "New." Comped orders don't count toward either bucket. Accuracy improves as more days accumulate — a customer with history before you started using this dashboard may show as "New" the first time they're seen here.</li>
       <li><b>Customer Acquisition Cost</b> = Meta ad spend for the period ÷ New Customers for the same period.</li>
       <li><b>Top Performing Ad</b> = highest number of Results (conversions) in the period, from your Meta Ads-by-day export. Ties break toward lower spend.</li>
-      <li><b>Top Selling Product</b> = highest units sold in the period, from your Orders export line items (grouped by product/variant name). Comped orders count since real product still shipped; cancelled orders are excluded.</li>
+      <li><b>Top Selling Product</b> = highest units sold in the period, from your Orders export line items (grouped by product/variant name). Comped orders count since real product still shipped; cancelled orders and "4DR GRD 15" are excluded from ranking.</li>
       <li>Your Orders export is a rolling window (not full history), so pounds/customer data is stored locally in this browser and merged in day over day, deduped by order number. Use <b>Backup data</b> periodically as a safety net — it saves everything to a file you can restore from.</li>
       <li>A small <sup style="color:#A97C2F">✦</sup> next to a number means the date range extends earlier than your accumulated order history — that figure may be incomplete for the earliest days in range.</li>
     </ul>
@@ -353,6 +357,13 @@ const KEYS = {
   info: LS_PREFIX+'info',
   settings: LS_PREFIX+'settings',
 };
+
+const TOP_PRODUCT_EXCLUDED = new Set(['4DR GRD 15']);
+function isExcludedFromTopProduct(li){
+  const sku = (li.sku||'').trim().toUpperCase();
+  const name = (li.name||'').trim().toUpperCase();
+  return TOP_PRODUCT_EXCLUDED.has(sku) || TOP_PRODUCT_EXCLUDED.has(name);
+}
 
 const METRIC_DEFS = [
   {key:'revenue', label:'Total Revenue', fmt:fmtCurrency0},
@@ -655,6 +666,7 @@ function computeMetrics(start,end){
   const productTotals = {};
   for (const o of inRange){
     for (const li of o.lineItems){
+      if (isExcludedFromTopProduct(li)) continue;
       const key = li.name || li.sku;
       if (!key) continue;
       if (!productTotals[key]) productTotals[key] = {units:0, pounds:0};
@@ -681,18 +693,20 @@ function rangeLabelStr(start,end){
   return start===end ? start : `${start} → ${end}`;
 }
 
-function getColumnsForMode(){
+function getColumnsForMode(modeOverride, compareTypeOverride){
+  const mode = modeOverride || viewState.mode;
+  const compareType = compareTypeOverride || viewState.compareType;
   const today = todayISO();
   const yesterday = addDaysISO(today,-1);
   const weekStartsOn = state.settings.weekStartsOn;
 
-  if (viewState.mode==='compare'){
+  if (mode==='compare'){
     let curStart,curEnd,prevStart,prevEnd,curLabel,prevLabel;
-    if (viewState.compareType==='weekVsLast'){
+    if (compareType==='weekVsLast'){
       curStart = startOfWeekISO(yesterday, weekStartsOn); curEnd = yesterday;
       prevStart = addDaysISO(curStart,-7); prevEnd = addDaysISO(curEnd,-7);
       curLabel='This Week'; prevLabel='Last Week';
-    } else if (viewState.compareType==='monthVsLast'){
+    } else if (compareType==='monthVsLast'){
       curStart = startOfMonthISO(yesterday); curEnd = yesterday;
       prevStart = shiftMonthISO(curStart,-1); prevEnd = shiftMonthISO(curEnd,-1);
       curLabel='This Month'; prevLabel='Last Month';
@@ -710,7 +724,7 @@ function getColumnsForMode(){
     ];
   }
 
-  if (viewState.mode==='custom'){
+  if (mode==='custom'){
     const s = viewState.customStart || yesterday;
     const e = viewState.customEnd || yesterday;
     return [
@@ -854,6 +868,117 @@ function renderChips(){
   }).join('');
 }
 
+/* ================= CSV export ================= */
+function rawMetricValue(key, val){
+  if (val==null) return '';
+  if (key==='revenue') return Math.round(val);
+  if (key==='pounds') return Number(val).toFixed(1);
+  if (key==='aov' || key==='pricePerLb' || key==='cac') return Number(val).toFixed(2);
+  return val;
+}
+
+function buildMetricsRows(columns){
+  const rows = [['Metric', ...columns.map(c=>c.label)]];
+  for (const def of METRIC_DEFS){
+    const row = [def.label];
+    for (const col of columns){
+      if (col.isDelta){
+        const d = computeDelta(def.key, col.to, col.from);
+        if (!d) row.push('');
+        else if (d.dir==='new') row.push('New');
+        else row.push(`${d.dir==='up'?'+':d.dir==='down'?'-':''}${Math.abs(d.pct).toFixed(1)}%`);
+      } else {
+        row.push(rawMetricValue(def.key, col.metrics[def.key]));
+      }
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+function buildTopAdRows(columns){
+  const rows = [[], ['Top Performing Ad'], ['Period','Ad Name','Results','Spend ($)']];
+  for (const col of columns.filter(c=>!c.isDelta)){
+    const ad = col.metrics.topAd;
+    rows.push([col.label, ad?ad.name:'', ad?ad.results:'', ad?Math.round(ad.spend):'']);
+  }
+  return rows;
+}
+
+function buildTopProductRows(columns){
+  const rows = [[], ['Top Selling Product'], ['Period','Product','Units Sold','Pounds']];
+  for (const col of columns.filter(c=>!c.isDelta)){
+    const p = col.metrics.topProduct;
+    rows.push([col.label, p?p.name:'', p?p.units:'', p?p.pounds.toFixed(1):'']);
+  }
+  return rows;
+}
+
+function csvCell(v){
+  if (v==null) return '';
+  const s = String(v);
+  return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+
+function toCSV(rows){
+  return rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
+}
+
+function downloadCSV(filename, rows){
+  const blob = new Blob([toCSV(rows)], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function viewLabelFor(mode, columns){
+  if (mode==='compare') return 'Compare: '+columns.filter(c=>!c.isDelta).map(c=>c.label).join(' vs ');
+  if (mode==='custom') return 'Custom Range: '+columns[0].sub;
+  return 'Standard (Daily / WTD / MTD)';
+}
+
+function downloadCurrentView(){
+  const columns = getColumnsForMode();
+  const rows = [
+    [`4 Diamond Ranch — ${viewLabelFor(viewState.mode, columns)}`],
+    [`Generated ${todayISO()}`],
+    [],
+    ...buildMetricsRows(columns),
+    ...buildTopAdRows(columns),
+    ...buildTopProductRows(columns),
+  ];
+  downloadCSV(`4dr-metrics-${viewState.mode}-${todayISO()}.csv`, rows);
+}
+
+function downloadDailyReport(){
+  const standardCols = getColumnsForMode('standard');
+  const ydayCols = getColumnsForMode('compare','ydayVsPrior');
+  const weekCols = getColumnsForMode('compare','weekVsLast');
+  const rows = [
+    ['4 Diamond Ranch — Daily Report'],
+    [`Generated ${todayISO()}`],
+    [],
+    ['=== STANDARD (Daily / WTD / MTD) ==='],
+    ...buildMetricsRows(standardCols),
+    ...buildTopAdRows(standardCols),
+    ...buildTopProductRows(standardCols),
+    [],
+    ['=== COMPARE: YESTERDAY VS DAY BEFORE ==='],
+    ...buildMetricsRows(ydayCols),
+    ...buildTopAdRows(ydayCols),
+    ...buildTopProductRows(ydayCols),
+    [],
+    ['=== COMPARE: THIS WEEK VS LAST WEEK ==='],
+    ...buildMetricsRows(weekCols),
+    ...buildTopAdRows(weekCols),
+    ...buildTopProductRows(weekCols),
+  ];
+  downloadCSV(`4dr-daily-report-${todayISO()}.csv`, rows);
+}
+
 /* ================= Event wiring ================= */
 async function readFileAsText(file){
   return new Promise((resolve,reject)=>{
@@ -947,6 +1072,9 @@ function initViewbar(){
 }
 
 function initDataButtons(){
+  document.getElementById('downloadViewBtn').addEventListener('click', downloadCurrentView);
+  document.getElementById('downloadDailyReportBtn').addEventListener('click', downloadDailyReport);
+
   document.getElementById('backupBtn').addEventListener('click', ()=>{
     const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
     const url = URL.createObjectURL(blob);

@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4 Diamond Ranch — Operations Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root{
+    --paper:#ECE4D3;
+    --surface:#FBF8F1;
+    --surface-2:#F3EBD9;
+    --ink:#241C15;
+    --ink-soft:#6E6151;
+    --ink-faint:#9C8F7C;
+    --rule:#D9CBAC;
+    --brand:#2E6B3F;
+    --brand-ink:#1E4A2A;
+    --warn:#9C3B32;
+    --brass:#A97C2F;
+    --sage:#55694B;
+    --rust:#9C5B3C;
+    --shadow:0 1px 2px rgba(37,29,21,0.07), 0 6px 16px rgba(37,29,21,0.06);
+    --radius:3px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(37,29,21,0.035) 1px, transparent 0);
+    background-size:22px 22px;
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    line-height:1.45;
+    padding:28px 20px 60px;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+
+  /* ---------- Header ---------- */
+  header.top{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:16px;padding-bottom:20px;margin-bottom:22px;
+    border-bottom:2px solid var(--ink);
+  }
+  .brand{display:flex;align-items:center;gap:14px;}
+  .stamp{
+    width:52px;height:52px;border-radius:50%;
+    border:2.5px solid var(--brand);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Oswald',sans-serif;font-weight:700;font-size:15px;
+    color:var(--brand);letter-spacing:0.5px;
+    flex:none;
+    transform:rotate(-6deg);
+  }
+  .brand-text h1{
+    font-family:'Oswald',sans-serif;font-weight:700;font-size:22px;
+    letter-spacing:1.5px;text-transform:uppercase;margin:0;color:var(--ink);
+  }
+  .brand-text p{
+    margin:2px 0 0;font-size:12px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--ink-soft);font-weight:500;
+  }
+  .today{
+    text-align:right;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-soft);
+  }
+  .today strong{display:block;font-size:15px;color:var(--ink);font-weight:600;}
+
+  /* ---------- Section titles ---------- */
+  .section-title{
+    font-family:'Oswald',sans-serif;font-weight:600;font-size:13px;
+    letter-spacing:2px;text-transform:uppercase;color:var(--ink-soft);
+    margin:0 0 12px;display:flex;align-items:center;gap:10px;
+  }
+  .section-title::after{content:'';flex:1;height:1px;background:var(--rule);}
+
+  /* ---------- Intake ---------- */
+  .intake{margin-bottom:8px;}
+  .dropzone{
+    border:2px dashed var(--rule);
+    border-radius:var(--radius);
+    background:var(--surface);
+    padding:28px 20px;text-align:center;cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .dropzone.drag{border-color:var(--brand);background:var(--surface-2);}
+  .dropzone p{margin:0;color:var(--ink-soft);font-size:14px;}
+  .dropzone p.big{font-family:'Oswald',sans-serif;font-weight:600;font-size:15px;
+    letter-spacing:0.5px;color:var(--ink);text-transform:uppercase;margin-bottom:4px;}
+  .dropzone input{display:none;}
+
+  .chips{
+    display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:14px;
+  }
+  .chip{
+    background:var(--surface);border:1px solid var(--rule);border-radius:var(--radius);
+    padding:10px 12px;font-size:11.5px;position:relative;overflow:hidden;
+  }
+  .chip.loaded{border-color:var(--sage);}
+  .chip .dot{
+    width:7px;height:7px;border-radius:50%;background:var(--ink-faint);
+    display:inline-block;margin-right:6px;
+  }
+  .chip.loaded .dot{background:var(--sage);}
+  .chip .label{
+    font-family:'Oswald',sans-serif;font-weight:600;letter-spacing:0.5px;
+    text-transform:uppercase;font-size:11px;color:var(--ink);
+  }
+  .chip .detail{color:var(--ink-soft);margin-top:4px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;line-height:1.5;}
+
+  .intake-log{margin-top:10px;font-size:12px;color:var(--ink-soft);}
+  .intake-log div{padding:2px 0;}
+  .intake-log .err{color:var(--warn);}
+
+  /* ---------- Settings bar ---------- */
+  .settingsbar{
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+    margin:22px 0;padding:12px 14px;background:var(--surface);border:1px solid var(--rule);border-radius:var(--radius);
+  }
+  .settingsbar .group{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ink-soft);}
+  .segmented{display:inline-flex;border:1px solid var(--rule);border-radius:var(--radius);overflow:hidden;}
+  .segmented button{
+    border:none;background:var(--surface);color:var(--ink-soft);font-size:12px;padding:6px 12px;
+    cursor:pointer;font-family:'Inter',sans-serif;font-weight:500;
+  }
+  .segmented button.active{background:var(--brand);color:#fff;}
+  .btn{
+    border:1px solid var(--rule);background:var(--surface);color:var(--ink);
+    padding:6px 13px;border-radius:var(--radius);font-size:12px;cursor:pointer;
+    font-family:'Inter',sans-serif;font-weight:500;
+  }
+  .btn:hover{border-color:var(--brand);}
+  .btn.danger{color:var(--brand-ink);}
+
+  /* ---------- View bar ---------- */
+  .viewbar{
+    display:flex;align-items:center;flex-wrap:wrap;gap:14px;
+    margin:22px 0 12px;padding:12px 14px;background:var(--surface);border:1px solid var(--rule);border-radius:var(--radius);
+  }
+  .viewbar .group{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ink-soft);flex-wrap:wrap;}
+  .viewbar label{display:flex;align-items:center;gap:6px;}
+  .viewbar input[type="date"]{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink);
+    border:1px solid var(--rule);border-radius:var(--radius);background:var(--surface);
+    padding:5px 8px;
+  }
+
+  /* ---------- Metrics grid ---------- */
+  .grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px;margin-top:16px;
+  }
+  .card{
+    position:relative;background:var(--surface);border:1px solid var(--rule);
+    border-radius:var(--radius);padding:16px 16px 14px;box-shadow:var(--shadow);
+  }
+  .card::before{
+    content:'';position:absolute;top:-1px;left:-1px;width:14px;height:14px;
+    background:var(--paper);
+    clip-path:polygon(0 0, 100% 0, 0 100%);
+    border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  }
+  .card .label{
+    font-family:'Oswald',sans-serif;font-weight:600;font-size:12px;letter-spacing:1px;
+    text-transform:uppercase;color:var(--ink-soft);margin-bottom:12px;padding-left:6px;
+  }
+  .card .values{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+  .value-col{text-align:left;}
+  .value-col .vlabel{
+    display:block;font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;
+    color:var(--ink-faint);margin-bottom:3px;font-weight:600;
+  }
+  .value-col .vnum{
+    font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:16px;color:var(--ink);
+    word-break:break-word;
+  }
+  .value-col .vnum sup{font-size:10px;color:var(--brass);margin-left:1px;}
+  .value-col .vnum.delta{font-size:14px;}
+  .delta-up{color:var(--brand);}
+  .delta-down{color:var(--rust);}
+  .delta-flat{color:var(--ink-faint);}
+  .delta-new{color:var(--ink-soft);font-style:italic;font-size:13px;}
+
+  /* ---------- Top ad card ---------- */
+  .topad{
+    margin-top:14px;background:var(--surface);border:1px solid var(--rule);border-radius:var(--radius);
+    padding:16px;box-shadow:var(--shadow);position:relative;
+  }
+  .topad::before{
+    content:'';position:absolute;top:-1px;left:-1px;width:14px;height:14px;background:var(--paper);
+    clip-path:polygon(0 0, 100% 0, 0 100%);border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  }
+  .topad .label{
+    font-family:'Oswald',sans-serif;font-weight:600;font-size:12px;letter-spacing:1px;
+    text-transform:uppercase;color:var(--ink-soft);margin-bottom:12px;padding-left:6px;
+  }
+  .topad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .topad-period{border-left:2px solid var(--rule);padding-left:12px;}
+  .topad-period .vlabel{
+    display:block;font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;
+    color:var(--ink-faint);margin-bottom:6px;font-weight:600;
+  }
+  .topad-name{font-weight:600;font-size:13.5px;color:var(--ink);margin-bottom:4px;
+    display:flex;align-items:center;gap:6px;}
+  .ribbon{
+    display:inline-block;background:var(--brass);color:#fff;font-size:9px;font-weight:700;
+    padding:1px 6px;border-radius:2px;letter-spacing:0.5px;text-transform:uppercase;flex:none;
+  }
+  .topad-stats{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink-soft);}
+  .topad-stats b{color:var(--ink);}
+  .topad-empty{color:var(--ink-faint);font-size:12.5px;font-style:italic;}
+
+  /* ---------- Methodology ---------- */
+  details.methodology{
+    margin-top:26px;background:var(--surface);border:1px solid var(--rule);border-radius:var(--radius);
+    padding:14px 16px;
+  }
+  details.methodology summary{
+    cursor:pointer;font-family:'Oswald',sans-serif;font-weight:600;font-size:12.5px;
+    letter-spacing:1px;text-transform:uppercase;color:var(--ink-soft);
+  }
+  .methodology ul{margin:12px 0 4px;padding-left:18px;font-size:13px;color:var(--ink-soft);}
+  .methodology li{margin-bottom:8px;}
+  .methodology b{color:var(--ink);}
+
+  footer{margin-top:22px;text-align:center;font-size:11.5px;color:var(--ink-faint);}
+
+  @media (max-width:640px){
+    .chips{grid-template-columns:repeat(2,1fr);}
+    header.top{flex-direction:column;align-items:flex-start;}
+    .today{text-align:left;}
+    .topad-grid{grid-template-columns:1fr !important;}
+    .topad-period{border-left:none;border-top:2px solid var(--rule);padding-left:0;padding-top:10px;}
+    .viewbar{flex-direction:column;align-items:flex-start;}
+    .viewbar .group{width:100%;}
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important;animation:none !important;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <div class="stamp">4DR</div>
+      <div class="brand-text">
+        <h1>4 Diamond Ranch</h1>
+        <p>Operations Ledger</p>
+      </div>
+    </div>
+    <div class="today">
+      <strong id="todayLabel">—</strong>
+      <span id="rangeLabel">—</span>
+    </div>
+  </header>
+
+  <section class="intake">
+    <div class="section-title">Intake</div>
+    <div class="dropzone" id="dropzone">
+      <p class="big">Drop today's exports here</p>
+      <p>Total Sales, New vs. Returning, Meta Ads, Orders, or Products — any number, any order. Click to browse instead.</p>
+      <input type="file" id="fileInput" multiple accept=".csv">
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="intake-log" id="intakeLog"></div>
+  </section>
+
+  <div class="viewbar" id="viewbar">
+    <div class="group">
+      View
+      <div class="segmented" id="modeToggle">
+        <button data-val="standard">Standard</button>
+        <button data-val="compare">Compare</button>
+        <button data-val="custom">Custom Range</button>
+      </div>
+    </div>
+    <div class="group" id="compareSub" style="display:none;">
+      <div class="segmented" id="compareToggle">
+        <button data-val="ydayVsPrior">Yesterday vs Day Before</button>
+        <button data-val="weekVsLast">This Week vs Last Week</button>
+        <button data-val="monthVsLast">This Month vs Last Month</button>
+      </div>
+    </div>
+    <div class="group" id="customSub" style="display:none;">
+      <label>From <input type="date" id="customStart"></label>
+      <label>To <input type="date" id="customEnd"></label>
+      <button class="btn" id="customApply">Apply</button>
+    </div>
+  </div>
+
+  <div class="settingsbar">
+    <div class="group">
+      Week starts
+      <div class="segmented" id="weekToggle">
+        <button data-val="0">Sun</button>
+        <button data-val="1">Mon</button>
+      </div>
+    </div>
+    <div class="group">
+      <button class="btn" id="backupBtn">Backup data</button>
+      <button class="btn" id="restoreBtn">Restore data</button>
+      <input type="file" id="restoreInput" accept=".json" style="display:none">
+      <button class="btn danger" id="resetBtn">Reset all data</button>
+    </div>
+  </div>
+
+  <div class="section-title">Metrics</div>
+  <div class="grid" id="grid"></div>
+
+  <div class="topad" id="topAdCard">
+    <div class="label">Top Performing Ad — by orders/conversions</div>
+    <div class="topad-grid" id="topAdGrid"></div>
+  </div>
+
+  <details class="methodology">
+    <summary>Methodology &amp; data notes</summary>
+    <ul>
+      <li><b>Daily</b> means yesterday — the most recent fully complete day. <b>WTD</b> and <b>MTD</b> run from the start of the week/month through yesterday, so all three numbers are always "as of end of yesterday" and today's partial data never sneaks in.</li>
+      <li><b>Revenue / Orders / AOV</b> come from your Shopify "Total sales over time" export. $0 comped/gifting orders (identified from your Orders export) are subtracted from the Orders count — revenue is unaffected since those orders already net to $0.</li>
+      <li><b>Pounds</b> is computed by matching each line item in your Orders export to its weight in the Products catalog (grams ÷ 453.592). Comped orders are included in pounds since real product still shipped. Cancelled orders are excluded.</li>
+      <li><b>New / Repeat Customers</b> are real counts, built by tracking each customer's email across every Orders export you've uploaded and flagging their earliest known order as "New." Comped orders don't count toward either bucket. Accuracy improves as more days accumulate — a customer with history before you started using this dashboard may show as "New" the first time they're seen here.</li>
+      <li><b>Customer Acquisition Cost</b> = Meta ad spend for the period ÷ New Customers for the same period.</li>
+      <li><b>Top Performing Ad</b> = highest number of Results (conversions) in the period, from your Meta Ads-by-day export. Ties break toward lower spend.</li>
+      <li>Your Orders export is a rolling window (not full history), so pounds/customer data is stored locally in this browser and merged in day over day, deduped by order number. Use <b>Backup data</b> periodically as a safety net — it saves everything to a file you can restore from.</li>
+      <li>A small <sup style="color:#A97C2F">✦</sup> next to a number means the date range extends earlier than your accumulated order history — that figure may be incomplete for the earliest days in range.</li>
+    </ul>
+  </details>
+
+  <footer>Runs entirely in this browser. Nothing is uploaded anywhere — data lives in this browser's local storage until you clear it or use Reset.</footer>
+
+</div>
+
+<script>
+/* ================= Constants ================= */
+const GRAMS_PER_LB = 453.592;
+const LS_PREFIX = '4dr_';
+const KEYS = {
+  totalSales: LS_PREFIX+'total_sales',
+  newReturning: LS_PREFIX+'new_returning',
+  catalog: LS_PREFIX+'catalog',
+  ordersAccum: LS_PREFIX+'orders_accum',
+  metaAds: LS_PREFIX+'meta_ads',
+  info: LS_PREFIX+'info',
+  settings: LS_PREFIX+'settings',
+};
+
+const METRIC_DEFS = [
+  {key:'revenue', label:'Total Revenue', fmt:fmtCurrency0},
+  {key:'orders', label:'Number of Orders', fmt:fmtNumber, warnKey:'ordersPartial'},
+  {key:'pounds', label:'Number of Pounds', fmt:fmtLb, warnKey:'partial'},
+  {key:'aov', label:'Average Order Value', fmt:fmtCurrency2},
+  {key:'pricePerLb', label:'Avg. Price per Pound', fmt:fmtCurrency2, warnKey:'partial'},
+  {key:'newCustomers', label:'New Customers', fmt:fmtNumber, warnKey:'partial'},
+  {key:'repeatCustomers', label:'Repeat Customers', fmt:fmtNumber, warnKey:'partial'},
+  {key:'cac', label:'Customer Acquisition Cost', fmt:fmtCACval, warnKey:'partial'},
+];
+
+/* ================= Formatting ================= */
+function fmtCurrency0(n){ return '$'+Math.round(n||0).toLocaleString('en-US'); }
+function fmtCurrency2(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtNumber(n){ return Number(n||0).toLocaleString('en-US'); }
+function fmtLb(n){ return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1})+' lb'; }
+function fmtCACval(n){ return (n==null) ? '—' : fmtCurrency2(n); }
+
+/* ================= Storage ================= */
+function loadJSON(key, fallback){
+  try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+  catch(e){ return fallback; }
+}
+function saveJSON(key, val){
+  try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){ console.error('Storage save failed', key, e); }
+}
+
+let state = {
+  totalSales: loadJSON(KEYS.totalSales, []),
+  newReturning: loadJSON(KEYS.newReturning, []),
+  catalog: loadJSON(KEYS.catalog, {}),
+  ordersAccum: loadJSON(KEYS.ordersAccum, {}),
+  metaAds: loadJSON(KEYS.metaAds, {}),
+  info: loadJSON(KEYS.info, {}),
+  settings: loadJSON(KEYS.settings, {weekStartsOn:1, viewMode:'standard', compareType:'ydayVsPrior', customStart:null, customEnd:null}),
+};
+
+let viewState = {
+  mode: state.settings.viewMode || 'standard',
+  compareType: state.settings.compareType || 'ydayVsPrior',
+  customStart: state.settings.customStart || null,
+  customEnd: state.settings.customEnd || null,
+};
+
+function saveViewState(){
+  state.settings.viewMode = viewState.mode;
+  state.settings.compareType = viewState.compareType;
+  state.settings.customStart = viewState.customStart;
+  state.settings.customEnd = viewState.customEnd;
+  saveJSON(KEYS.settings, state.settings);
+}
+
+function persistAll(){
+  saveJSON(KEYS.totalSales, state.totalSales);
+  saveJSON(KEYS.newReturning, state.newReturning);
+  saveJSON(KEYS.catalog, state.catalog);
+  saveJSON(KEYS.ordersAccum, state.ordersAccum);
+  saveJSON(KEYS.metaAds, state.metaAds);
+  saveJSON(KEYS.info, state.info);
+  saveJSON(KEYS.settings, state.settings);
+}
+
+/* ================= File type detection ================= */
+function detectFileType(fields){
+  const f = new Set(fields.map(x=>x.trim()));
+  if (f.has('New or returning customer')) return 'newReturning';
+  if (f.has('Ad name') && f.has('Amount spent (USD)')) return 'metaAds';
+  if (f.has('Name') && f.has('Lineitem sku')) return 'ordersExport';
+  if (f.has('Variant SKU') && f.has('Variant Grams')) return 'catalog';
+  if (f.has('Day') && f.has('Total sales') && f.has('Orders')) return 'totalSales';
+  return 'unknown';
+}
+
+/* ================= Parsers ================= */
+function parseTotalSales(rows){
+  const out = [];
+  for (const row of rows){
+    if (!row['Day']) continue;
+    out.push({
+      date: row['Day'],
+      orders: Number(row['Orders'])||0,
+      totalSales: Number(row['Total sales'])||0,
+    });
+  }
+  return out;
+}
+
+function parseNewReturning(rows){
+  const out = [];
+  for (const row of rows){
+    if (!row['Day']) continue;
+    out.push({
+      type:(row['New or returning customer']||'').trim(),
+      date:row['Day'],
+      sales:Number(row['Total sales'])||0,
+    });
+  }
+  return out;
+}
+
+function parseCatalog(rows){
+  const catalog = {};
+  for (const row of rows){
+    const sku = (row['Variant SKU']||'').trim();
+    const grams = Number(row['Variant Grams'])||0;
+    if (sku && grams>0) catalog[sku] = grams/GRAMS_PER_LB;
+  }
+  return catalog;
+}
+
+function parseOrdersExport(rows){
+  const byName = {};
+  for (const row of rows){
+    const name = row['Name'];
+    if (!name) continue;
+    if (!byName[name]) byName[name] = {name,email:'',financialStatus:'',createdAt:'',total:null,source:'',cancelledAt:'',lineItems:[]};
+    const o = byName[name];
+    if (row['Financial Status']) o.financialStatus = row['Financial Status'];
+    if (row['Email']) o.email = row['Email'].trim().toLowerCase();
+    if (row['Created at']) o.createdAt = row['Created at'];
+    if (row['Total']!=='' && row['Total']!=null) o.total = Number(row['Total']);
+    if (row['Source']) o.source = row['Source'];
+    if (row['Cancelled at']) o.cancelledAt = row['Cancelled at'];
+    const qty = Number(row['Lineitem quantity'])||0;
+    const sku = (row['Lineitem sku']||'').trim();
+    if (sku && qty) o.lineItems.push({sku,qty});
+  }
+  return Object.values(byName).map(o=>({
+    ...o,
+    date:(o.createdAt||'').split(' ')[0],
+    total:o.total||0,
+    isComped:(o.total||0)===0,
+    isCancelled:!!o.cancelledAt,
+  }));
+}
+
+function parseMetaAdsDaily(rows){
+  const byDay = {};
+  for (const row of rows){
+    const day = row['Day'];
+    const adName = row['Ad name'];
+    if (!day || !adName) continue;
+    const results = Number(row['Results'])||0;
+    const spend = Number(row['Amount spent (USD)'])||0;
+    if (!byDay[day]) byDay[day] = {};
+    if (!byDay[day][adName]) byDay[day][adName] = {results:0,spend:0};
+    byDay[day][adName].results += results;
+    byDay[day][adName].spend += spend;
+  }
+  return byDay;
+}
+
+/* ================= Ingest / merge ================= */
+function dateRangeOf(arr, dateFn){
+  let min=null,max=null;
+  for (const item of arr){
+    const d = dateFn(item);
+    if (!d) continue;
+    if (!min||d<min) min=d;
+    if (!max||d>max) max=d;
+  }
+  return {min,max};
+}
+
+function ingestFile(fileName, fields, rows){
+  const type = detectFileType(fields);
+  const now = new Date().toISOString();
+  switch(type){
+    case 'totalSales':{
+      state.totalSales = parseTotalSales(rows);
+      const r = dateRangeOf(state.totalSales, x=>x.date);
+      state.info.totalSales = {fileName, loadedAt:now, range:r};
+      return `Total Sales over time loaded (${r.min} → ${r.max}, ${state.totalSales.length} days)`;
+    }
+    case 'newReturning':{
+      state.newReturning = parseNewReturning(rows);
+      const r = dateRangeOf(state.newReturning, x=>x.date);
+      state.info.newReturning = {fileName, loadedAt:now, range:r};
+      return `New vs. Returning loaded (${r.min} → ${r.max})`;
+    }
+    case 'catalog':{
+      const cat = parseCatalog(rows);
+      state.catalog = {...state.catalog, ...cat};
+      state.info.catalog = {fileName, loadedAt:now, skuCount:Object.keys(state.catalog).length};
+      return `Products catalog loaded (${Object.keys(cat).length} weighted SKUs)`;
+    }
+    case 'ordersExport':{
+      const orders = parseOrdersExport(rows);
+      for (const o of orders) state.ordersAccum[o.name] = o;
+      const r = dateRangeOf(Object.values(state.ordersAccum), x=>x.date);
+      state.info.ordersAccum = {fileName, loadedAt:now, range:r, orderCount:Object.keys(state.ordersAccum).length, lastBatch:orders.length};
+      return `Orders merged: ${orders.length} orders in this file, ${Object.keys(state.ordersAccum).length} total accumulated (${r.min} → ${r.max})`;
+    }
+    case 'metaAds':{
+      state.metaAds = parseMetaAdsDaily(rows);
+      const days = Object.keys(state.metaAds).sort();
+      state.info.metaAds = {fileName, loadedAt:now, range:{min:days[0],max:days[days.length-1]}};
+      return `Meta Ads loaded (${days[0]} → ${days[days.length-1]}, ${days.length} days)`;
+    }
+    default:
+      return null;
+  }
+}
+
+/* ================= Date helpers ================= */
+function todayISO(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function addDaysISO(iso, n){
+  const [y,m,d] = iso.split('-').map(Number);
+  const dt = new Date(y,m-1,d);
+  dt.setDate(dt.getDate()+n);
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+}
+function startOfWeekISO(iso, weekStartsOn){
+  const [y,m,d] = iso.split('-').map(Number);
+  const dt = new Date(y,m-1,d);
+  const day = dt.getDay();
+  let diff = day - weekStartsOn;
+  if (diff<0) diff += 7;
+  dt.setDate(dt.getDate()-diff);
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+}
+function startOfMonthISO(iso){
+  const [y,m] = iso.split('-');
+  return `${y}-${m}-01`;
+}
+function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
+function shiftMonthISO(iso, delta){
+  const [y,m,d] = iso.split('-').map(Number);
+  let ny=y, nm=m+delta;
+  while(nm<1){nm+=12;ny--;}
+  while(nm>12){nm-=12;ny++;}
+  const day = Math.min(d, daysInMonth(ny,nm));
+  return `${ny}-${String(nm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+
+/* ================= Metrics engine ================= */
+function ordersAccumArray(){
+  return Object.values(state.ordersAccum);
+}
+function computeMetrics(start,end){
+  let revenue=0, rawOrders=0;
+  for (const row of state.totalSales){
+    if (row.date>=start && row.date<=end){ revenue+=row.totalSales; rawOrders+=row.orders; }
+  }
+
+  const allValid = ordersAccumArray().filter(o=>!o.isCancelled);
+  const inRange = allValid.filter(o=>o.date>=start && o.date<=end);
+  const compedCount = inRange.filter(o=>o.isComped).length;
+  const orders = Math.max(rawOrders - compedCount, 0);
+  const aov = orders>0 ? revenue/orders : 0;
+
+  let pounds=0;
+  for (const o of inRange){
+    for (const li of o.lineItems){
+      pounds += (state.catalog[li.sku]||0)*li.qty;
+    }
+  }
+  const pricePerLb = pounds>0 ? revenue/pounds : 0;
+
+  const firstSeen = {};
+  for (const o of allValid){
+    if (!o.email) continue;
+    if (!firstSeen[o.email] || o.date<firstSeen[o.email]) firstSeen[o.email]=o.date;
+  }
+  const newSet=new Set(), repeatSet=new Set();
+  for (const o of inRange){
+    if (o.isComped || !o.email) continue;
+    if (firstSeen[o.email]===o.date) newSet.add(o.email); else repeatSet.add(o.email);
+  }
+  const newCustomers = newSet.size;
+  const repeatCustomers = repeatSet.size;
+
+  let adSpend=0;
+  const adTotals={};
+  for (const day of Object.keys(state.metaAds)){
+    if (day<start||day>end) continue;
+    const dayData = state.metaAds[day];
+    for (const adName of Object.keys(dayData)){
+      const {results,spend} = dayData[adName];
+      adSpend += spend;
+      if (!adTotals[adName]) adTotals[adName]={results:0,spend:0};
+      adTotals[adName].results += results;
+      adTotals[adName].spend += spend;
+    }
+  }
+  let topAd=null;
+  for (const name of Object.keys(adTotals)){
+    const t = adTotals[name];
+    if (!topAd || t.results>topAd.results || (t.results===topAd.results && t.spend<topAd.spend)){
+      topAd = {name, results:t.results, spend:t.spend};
+    }
+  }
+  const cac = newCustomers>0 ? adSpend/newCustomers : null;
+
+  const earliestOrderDate = allValid.reduce((min,o)=>(!min||o.date<min)?o.date:min, null);
+  const partial = !!(earliestOrderDate && start<earliestOrderDate);
+  const ordersPartial = partial; // orders count correction depends on same accumulated data
+
+  return {revenue,orders,pounds,aov,pricePerLb,newCustomers,repeatCustomers,adSpend,cac,topAd,partial,ordersPartial};
+}
+
+function rangeLabelStr(start,end){
+  return start===end ? start : `${start} → ${end}`;
+}
+
+function getColumnsForMode(){
+  const today = todayISO();
+  const yesterday = addDaysISO(today,-1);
+  const weekStartsOn = state.settings.weekStartsOn;
+
+  if (viewState.mode==='compare'){
+    let curStart,curEnd,prevStart,prevEnd,curLabel,prevLabel;
+    if (viewState.compareType==='weekVsLast'){
+      curStart = startOfWeekISO(yesterday, weekStartsOn); curEnd = yesterday;
+      prevStart = addDaysISO(curStart,-7); prevEnd = addDaysISO(curEnd,-7);
+      curLabel='This Week'; prevLabel='Last Week';
+    } else if (viewState.compareType==='monthVsLast'){
+      curStart = startOfMonthISO(yesterday); curEnd = yesterday;
+      prevStart = shiftMonthISO(curStart,-1); prevEnd = shiftMonthISO(curEnd,-1);
+      curLabel='This Month'; prevLabel='Last Month';
+    } else {
+      curStart = curEnd = yesterday;
+      prevStart = prevEnd = addDaysISO(yesterday,-1);
+      curLabel='Yesterday'; prevLabel='Day Before';
+    }
+    const curM = computeMetrics(curStart,curEnd);
+    const prevM = computeMetrics(prevStart,prevEnd);
+    return [
+      {label:curLabel, sub:rangeLabelStr(curStart,curEnd), metrics:curM},
+      {label:prevLabel, sub:rangeLabelStr(prevStart,prevEnd), metrics:prevM},
+      {label:'Change', isDelta:true, from:prevM, to:curM},
+    ];
+  }
+
+  if (viewState.mode==='custom'){
+    const s = viewState.customStart || yesterday;
+    const e = viewState.customEnd || yesterday;
+    return [
+      {label:'Custom', sub:rangeLabelStr(s,e), metrics: computeMetrics(s,e)},
+    ];
+  }
+
+  const wStart = startOfWeekISO(yesterday, weekStartsOn);
+  const mStart = startOfMonthISO(yesterday);
+  return [
+    {label:'Daily', sub:yesterday, metrics: computeMetrics(yesterday,yesterday)},
+    {label:'WTD', sub:`from ${wStart}`, metrics: computeMetrics(wStart,yesterday)},
+    {label:'MTD', sub:`from ${mStart}`, metrics: computeMetrics(mStart,yesterday)},
+  ];
+}
+
+function computeDelta(key, toM, fromM){
+  const curV = toM[key], prevV = fromM[key];
+  if (curV==null || prevV==null) return null;
+  if (prevV===0) return curV===0 ? {dir:'flat',pct:0} : {dir:'new'};
+  const pct = ((curV-prevV)/Math.abs(prevV))*100;
+  return {dir: pct>0.05?'up':(pct<-0.05?'down':'flat'), pct};
+}
+
+function fmtDelta(d){
+  if (!d) return '—';
+  if (d.dir==='new') return '<span class="delta-new">New</span>';
+  const arrow = d.dir==='up' ? '▲' : d.dir==='down' ? '▼' : '▬';
+  return `<span class="delta-${d.dir}">${arrow} ${Math.abs(d.pct).toFixed(1)}%</span>`;
+}
+
+/* ================= Rendering ================= */
+function buildGrid(columns){
+  const grid = document.getElementById('grid');
+  const n = columns.length;
+  grid.innerHTML = METRIC_DEFS.map(def => `
+    <div class="card" data-metric="${def.key}">
+      <div class="label">${def.label}</div>
+      <div class="values" style="grid-template-columns:repeat(${n},1fr);">
+        ${columns.map((col,i)=>`
+          <div class="value-col">
+            <span class="vlabel">${escapeHTML(col.label)}</span>
+            <span class="vnum${col.isDelta?' delta':''}" data-col="${i}">—</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  METRIC_DEFS.forEach(def=>{
+    const card = document.querySelector(`[data-metric="${def.key}"]`);
+    columns.forEach((col,i)=>{
+      const el = card.querySelector(`[data-col="${i}"]`);
+      if (col.isDelta){
+        el.innerHTML = fmtDelta(computeDelta(def.key, col.to, col.from));
+      } else {
+        const val = col.metrics[def.key];
+        const warn = def.warnKey && col.metrics[def.warnKey];
+        el.innerHTML = def.fmt(val) + (warn ? '<sup title="Date range extends earlier than your accumulated order history">✦</sup>' : '');
+      }
+    });
+  });
+}
+
+function renderTopAd(columns){
+  const cols = columns.filter(c=>!c.isDelta);
+  const grid = document.getElementById('topAdGrid');
+  grid.style.gridTemplateColumns = `repeat(${cols.length},1fr)`;
+  grid.innerHTML = cols.map(col=>{
+    const m = col.metrics;
+    if (!m.topAd){
+      return `<div class="topad-period"><span class="vlabel">${escapeHTML(col.label)}</span><div class="topad-empty">No ad activity in range</div></div>`;
+    }
+    const ad = m.topAd;
+    const cpr = ad.results>0 ? (ad.spend/ad.results) : null;
+    return `<div class="topad-period">
+      <span class="vlabel">${escapeHTML(col.label)}</span>
+      <div class="topad-name"><span class="ribbon">Top</span>${escapeHTML(ad.name)}</div>
+      <div class="topad-stats"><b>${fmtNumber(ad.results)}</b> results · <b>${fmtCurrency0(ad.spend)}</b> spent${cpr!=null?` · <b>${fmtCurrency2(cpr)}</b>/result`:''}</div>
+    </div>`;
+  }).join('');
+}
+
+function escapeHTML(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderAll(){
+  const today = todayISO();
+  const columns = getColumnsForMode();
+
+  document.getElementById('todayLabel').textContent = new Date(today+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  document.getElementById('rangeLabel').textContent = columns.filter(c=>!c.isDelta).map(c=>`${c.label}: ${c.sub}`).join('  ·  ');
+
+  buildGrid(columns);
+  renderTopAd(columns);
+  renderChips();
+}
+
+function renderChips(){
+  const defs = [
+    {key:'totalSales', label:'Total Sales'},
+    {key:'newReturning', label:'New/Returning'},
+    {key:'metaAds', label:'Meta Ads'},
+    {key:'ordersAccum', label:'Orders'},
+    {key:'catalog', label:'Catalog'},
+  ];
+  const chips = document.getElementById('chips');
+  chips.innerHTML = defs.map(d=>{
+    const info = state.info[d.key];
+    const loaded = !!info;
+    let detail = 'Not loaded yet';
+    if (loaded){
+      if (d.key==='catalog') detail = `${info.skuCount} SKUs on file`;
+      else if (d.key==='ordersAccum') detail = `${info.orderCount} orders (${info.range.min} → ${info.range.max})`;
+      else detail = `${info.range.min} → ${info.range.max}`;
+    }
+    return `<div class="chip ${loaded?'loaded':''}">
+      <div class="label"><span class="dot"></span>${d.label}</div>
+      <div class="detail">${detail}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ================= Event wiring ================= */
+async function readFileAsText(file){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = ()=>resolve(r.result);
+    r.onerror = reject;
+    r.readAsText(file);
+  });
+}
+
+async function handleFiles(fileList){
+  const files = Array.from(fileList).filter(f=>f.name.toLowerCase().endsWith('.csv'));
+  const log = [];
+  for (const file of files){
+    try{
+      const text = await readFileAsText(file);
+      const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+      const msg = ingestFile(file.name, parsed.meta.fields||[], parsed.data);
+      if (msg) log.push(msg);
+      else log.push(`⚠ Could not identify "${file.name}" — none of the expected columns were found.`);
+    }catch(e){
+      log.push(`⚠ Error reading "${file.name}": ${e.message}`);
+    }
+  }
+  persistAll();
+  renderAll();
+  document.getElementById('intakeLog').innerHTML = log.map(l=>`<div class="${l.startsWith('⚠')?'err':''}">${escapeHTML(l)}</div>`).join('');
+}
+
+function initDropzone(){
+  const dz = document.getElementById('dropzone');
+  const input = document.getElementById('fileInput');
+  dz.addEventListener('click', ()=>input.click());
+  input.addEventListener('change', e=>{ if(e.target.files.length) handleFiles(e.target.files); input.value=''; });
+  ['dragenter','dragover'].forEach(evt=>dz.addEventListener(evt, e=>{e.preventDefault();dz.classList.add('drag');}));
+  ['dragleave','drop'].forEach(evt=>dz.addEventListener(evt, e=>{e.preventDefault();dz.classList.remove('drag');}));
+  dz.addEventListener('drop', e=>{ if(e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); });
+}
+
+function initSettings(){
+  const buttons = document.querySelectorAll('#weekToggle button');
+  function refresh(){
+    buttons.forEach(b=>b.classList.toggle('active', Number(b.dataset.val)===state.settings.weekStartsOn));
+  }
+  buttons.forEach(b=>b.addEventListener('click', ()=>{
+    state.settings.weekStartsOn = Number(b.dataset.val);
+    saveJSON(KEYS.settings, state.settings);
+    refresh();
+    renderAll();
+  }));
+  refresh();
+}
+
+function syncViewbarUI(){
+  const yesterday = addDaysISO(todayISO(),-1);
+  document.querySelectorAll('#modeToggle button').forEach(b=>b.classList.toggle('active', b.dataset.val===viewState.mode));
+  document.querySelectorAll('#compareToggle button').forEach(b=>b.classList.toggle('active', b.dataset.val===viewState.compareType));
+  document.getElementById('compareSub').style.display = viewState.mode==='compare' ? 'flex' : 'none';
+  document.getElementById('customSub').style.display = viewState.mode==='custom' ? 'flex' : 'none';
+  const cs = document.getElementById('customStart'), ce = document.getElementById('customEnd');
+  cs.max = yesterday; ce.max = yesterday;
+  cs.value = viewState.customStart || yesterday;
+  ce.value = viewState.customEnd || yesterday;
+}
+
+function initViewbar(){
+  document.querySelectorAll('#modeToggle button').forEach(b=>b.addEventListener('click', ()=>{
+    viewState.mode = b.dataset.val;
+    saveViewState();
+    syncViewbarUI();
+    renderAll();
+  }));
+  document.querySelectorAll('#compareToggle button').forEach(b=>b.addEventListener('click', ()=>{
+    viewState.compareType = b.dataset.val;
+    saveViewState();
+    syncViewbarUI();
+    renderAll();
+  }));
+  document.getElementById('customApply').addEventListener('click', ()=>{
+    const yesterday = addDaysISO(todayISO(),-1);
+    let s = document.getElementById('customStart').value || yesterday;
+    let e = document.getElementById('customEnd').value || yesterday;
+    if (s>e) [s,e]=[e,s];
+    viewState.customStart = s;
+    viewState.customEnd = e;
+    saveViewState();
+    syncViewbarUI();
+    renderAll();
+  });
+  syncViewbarUI();
+}
+
+function initDataButtons(){
+  document.getElementById('backupBtn').addEventListener('click', ()=>{
+    const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `4dr-dashboard-backup-${todayISO()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('restoreBtn').addEventListener('click', ()=>document.getElementById('restoreInput').click());
+  document.getElementById('restoreInput').addEventListener('change', async e=>{
+    const file = e.target.files[0];
+    if (!file) return;
+    try{
+      const text = await readFileAsText(file);
+      const restored = JSON.parse(text);
+      state = Object.assign({totalSales:[],newReturning:[],catalog:{},ordersAccum:{},metaAds:{},info:{},settings:{weekStartsOn:1,viewMode:'standard',compareType:'ydayVsPrior',customStart:null,customEnd:null}}, restored);
+      viewState = {
+        mode: state.settings.viewMode || 'standard',
+        compareType: state.settings.compareType || 'ydayVsPrior',
+        customStart: state.settings.customStart || null,
+        customEnd: state.settings.customEnd || null,
+      };
+      persistAll();
+      syncViewbarUI();
+      renderAll();
+      initSettings();
+    }catch(err){
+      alert('Could not restore from this file: '+err.message);
+    }
+    e.target.value='';
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', ()=>{
+    if (!confirm('This clears everything stored in this browser (orders history, catalog, all loaded reports). Back up first if you want a copy. Continue?')) return;
+    Object.values(KEYS).forEach(k=>localStorage.removeItem(k));
+    state = {totalSales:[],newReturning:[],catalog:{},ordersAccum:{},metaAds:{},info:{},settings:{weekStartsOn:1,viewMode:'standard',compareType:'ydayVsPrior',customStart:null,customEnd:null}};
+    viewState = {mode:'standard', compareType:'ydayVsPrior', customStart:null, customEnd:null};
+    syncViewbarUI();
+    renderAll();
+    initSettings();
+    document.getElementById('intakeLog').innerHTML = '';
+  });
+}
+
+/* ================= Init ================= */
+initDropzone();
+initSettings();
+initViewbar();
+initDataButtons();
+renderAll();
+</script>
+</body>
+</html>

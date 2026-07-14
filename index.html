@@ -337,11 +337,11 @@
     <ul>
       <li><b>Daily</b> means yesterday — the most recent fully complete day. <b>WTD</b> and <b>MTD</b> run from the start of the week/month through yesterday, so all three numbers are always "as of end of yesterday" and today's partial data never sneaks in.</li>
       <li><b>Revenue / Orders / AOV</b> come from your Shopify "Total sales over time" export. $0 comped/gifting orders (identified from your Orders export) are subtracted from the Orders count — revenue is unaffected since those orders already net to $0.</li>
-      <li><b>Pounds</b> is computed by matching each line item in your Orders export to its weight in the Products catalog (grams ÷ 453.592). Comped orders are included in pounds since real product still shipped. Cancelled orders are excluded.</li>
+      <li><b>Pounds</b> is computed by matching each line item in your Orders export to its weight in the Products catalog (grams ÷ 453.592). Comped and cancelled orders are excluded entirely.</li>
       <li><b>New / Repeat Customers</b> are real counts, built by tracking each customer's email across every Orders export you've uploaded and flagging their earliest known order as "New." Comped orders don't count toward either bucket. Accuracy improves as more days accumulate — a customer with history before you started using this dashboard may show as "New" the first time they're seen here.</li>
       <li><b>Customer Acquisition Cost</b> = Meta ad spend for the period ÷ New Customers for the same period.</li>
       <li><b>Top Performing Ad</b> = highest number of Results (conversions) in the period, from your Meta Ads-by-day export. Ties break toward lower spend. If <i>no</i> ad converted in the period, ranking falls back to highest CTR (Link clicks ÷ Impressions), then highest Impressions, then lowest spend — so a $0 conversion count doesn't default to whichever ad happened to spend the least.</li>
-      <li><b>Top Selling Product</b> = highest units sold in the period, from your Orders export line items (grouped by product/variant name). Comped orders count since real product still shipped; cancelled orders and "4DR GRD 15" are excluded from ranking.</li>
+      <li><b>Top Selling Product</b> = highest units sold in the period, from your Orders export line items (grouped by product/variant name). Comped orders, cancelled orders, and "4DR GRD 15" are excluded from ranking.</li>
       <li>Your Orders export is a rolling window (not full history), so pounds/customer data is stored locally in this browser and merged in day over day, deduped by order number. Use <b>Backup data</b> periodically as a safety net — it saves everything to a file you can restore from.</li>
       <li>A small <sup style="color:#A97C2F">✦</sup> next to a number means the date range extends earlier than your accumulated order history — that figure may be incomplete for the earliest days in range.</li>
     </ul>
@@ -625,6 +625,7 @@ function computeMetrics(start,end){
 
   let pounds=0;
   for (const o of inRange){
+    if (o.isComped) continue;
     for (const li of o.lineItems){
       pounds += (state.catalog[li.sku]||0)*li.qty;
     }
@@ -677,6 +678,7 @@ function computeMetrics(start,end){
 
   const productTotals = {};
   for (const o of inRange){
+    if (o.isComped) continue;
     for (const li of o.lineItems){
       if (isExcludedFromTopProduct(li)) continue;
       const key = li.name || li.sku;

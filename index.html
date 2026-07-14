@@ -343,7 +343,7 @@
       <li><b>Customer Acquisition Cost</b> = Meta ad spend for the period ÷ New Customers for the same period.</li>
       <li><b>Top Performing Ad</b> = highest number of Results (conversions) in the period, from your Meta Ads-by-day export. Ties break toward lower spend. If <i>no</i> ad converted in the period, ranking falls back to highest CTR (Link clicks ÷ Impressions), then highest Impressions, then lowest spend — so a $0 conversion count doesn't default to whichever ad happened to spend the least.</li>
       <li><b>Top Selling Product</b> = highest units sold in the period, from your Orders export line items (grouped by product/variant name). Orders under an excluded email, cancelled orders, and "4DR GRD 15" are excluded from ranking.</li>
-      <li>Orders placed under <b>hannah.tredway@fat-earth.com</b> are excluded from every metric on this dashboard.</li>
+      <li>Orders placed under <b>hannah.tredway@fat-earth.com</b> or <b>tcawdrey@fourdiamondranch.com</b> are excluded from every metric on this dashboard.</li>
       <li>Your Orders export is a rolling window (not full history), so pounds/customer data is stored locally in this browser and merged in day over day, deduped by order number. Use <b>Backup data</b> periodically as a safety net — it saves everything to a file you can restore from.</li>
       <li>A small <sup style="color:#A97C2F">✦</sup> next to a number means the date range extends earlier than your accumulated order history — that figure may be incomplete for the earliest days in range.</li>
     </ul>
@@ -376,7 +376,7 @@ function isExcludedFromTopProduct(li){
 
 // Orders under these emails are excluded from every reporting metric (Orders, Revenue,
 // Pounds, AOV, New/Repeat Customers, Top Selling Product) -- not based on order total.
-const REPORTING_EXCLUDED_EMAILS = new Set(['hannah.tredway@fat-earth.com']);
+const REPORTING_EXCLUDED_EMAILS = new Set(['hannah.tredway@fat-earth.com', 'tcawdrey@fourdiamondranch.com']);
 
 const METRIC_DEFS = [
   {key:'revenue', label:'Total Revenue', fmt:fmtCurrency0},

@@ -44,8 +44,8 @@ Full methodology is in the collapsible "Methodology & data notes" panel at the b
 dashboard itself — worth a read once. Short version:
 
 - Revenue/Orders/AOV come from the Total Sales report; orders placed under
-  hannah.tredway@fat-earth.com (identified via the Orders export) are excluded entirely —
-  from Orders, AOV, Pounds shipped, and Top Selling Product.
+  hannah.tredway@fat-earth.com or tcawdrey@fourdiamondranch.com (identified via the Orders
+  export) are excluded entirely — from Orders, AOV, Pounds shipped, and Top Selling Product.
 - Pounds, New/Repeat Customer counts, and CAC are built from your accumulated Orders exports
   (merged locally day over day, deduped by order number) joined against the Products catalog.
   These get more accurate the longer you've been using the dashboard, since they only know

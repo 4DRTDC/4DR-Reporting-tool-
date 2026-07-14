@@ -941,6 +941,9 @@ async function downloadCurrentView(){
 }
 
 async function downloadDailyReport(){
+  // Every section in this report is anchored on "yesterday," so title/filename use
+  // yesterday's date rather than the click date to avoid implying same-day figures.
+  const reportDate = addDaysISO(todayISO(),-1);
   const standardCols = getColumnsForMode('standard');
   const ydayCols = getColumnsForMode('compare','ydayVsPrior');
   const weekCols = getColumnsForMode('compare','weekVsLast');
@@ -948,7 +951,7 @@ async function downloadDailyReport(){
   const container = document.createElement('div');
   container.style.cssText = 'position:absolute;left:-9999px;top:0;width:1180px;background:#ECE4D3;padding:28px;font-family:Vollkorn,serif;';
   container.innerHTML = `
-    <div class="section-title" style="margin-top:0;">4 Diamond Ranch — Daily Report — ${todayISO()}</div>
+    <div class="section-title" style="margin-top:0;">4 Diamond Ranch — Daily Report — ${reportDate}</div>
     ${metricsSectionHTML('Standard (Daily / WTD / MTD)', standardCols)}
     ${metricsSectionHTML('Compare: Yesterday vs Day Before', ydayCols)}
     ${metricsSectionHTML('Compare: This Week vs Last Week', weekCols)}
@@ -956,7 +959,7 @@ async function downloadDailyReport(){
   document.body.appendChild(container);
   const canvas = await html2canvas(container, {backgroundColor:'#ECE4D3', scale:2});
   document.body.removeChild(container);
-  await canvasToPNG(canvas, `4dr-daily-report-${todayISO()}.png`);
+  await canvasToPNG(canvas, `4dr-daily-report-${reportDate}.png`);
 }
 
 /* ================= Event wiring ================= */

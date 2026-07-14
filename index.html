@@ -606,15 +606,6 @@ function startOfMonthISO(iso){
   const [y,m] = iso.split('-');
   return `${y}-${m}-01`;
 }
-function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
-function shiftMonthISO(iso, delta){
-  const [y,m,d] = iso.split('-').map(Number);
-  let ny=y, nm=m+delta;
-  while(nm<1){nm+=12;ny--;}
-  while(nm>12){nm-=12;ny++;}
-  const day = Math.min(d, daysInMonth(ny,nm));
-  return `${ny}-${String(nm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-}
 
 /* ================= Metrics engine ================= */
 function ordersAccumArray(){
@@ -724,12 +715,15 @@ function getColumnsForMode(modeOverride, compareTypeOverride){
   if (mode==='compare'){
     let curStart,curEnd,prevStart,prevEnd,curLabel,prevLabel;
     if (compareType==='weekVsLast'){
-      curStart = startOfWeekISO(yesterday, weekStartsOn); curEnd = yesterday;
-      prevStart = addDaysISO(curStart,-7); prevEnd = addDaysISO(curEnd,-7);
+      // Trailing 7 days, not calendar-week-to-date — otherwise this collapses to a single
+      // day early in the week and produces misleadingly small (or zero) numbers.
+      curEnd = yesterday; curStart = addDaysISO(yesterday,-6);
+      prevEnd = addDaysISO(curStart,-1); prevStart = addDaysISO(prevEnd,-6);
       curLabel='This Week'; prevLabel='Last Week';
     } else if (compareType==='monthVsLast'){
-      curStart = startOfMonthISO(yesterday); curEnd = yesterday;
-      prevStart = shiftMonthISO(curStart,-1); prevEnd = shiftMonthISO(curEnd,-1);
+      // Trailing 30 days, not calendar-month-to-date, for the same reason.
+      curEnd = yesterday; curStart = addDaysISO(yesterday,-29);
+      prevEnd = addDaysISO(curStart,-1); prevStart = addDaysISO(prevEnd,-29);
       curLabel='This Month'; prevLabel='Last Month';
     } else {
       curStart = curEnd = yesterday;

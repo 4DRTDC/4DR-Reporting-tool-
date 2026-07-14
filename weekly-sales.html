@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4 Diamond Ranch — Weekly Sales History</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Vollkorn:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#ECE4D3;
+    --surface:#FBF8F1;
+    --surface-2:#F3EBD9;
+    --ink:#241C15;
+    --ink-soft:#6E6151;
+    --ink-faint:#9C8F7C;
+    --rule:#D9CBAC;
+    --brand:#2E6B3F;
+    --brand-ink:#1E4A2A;
+    --rust:#9C5B3C;
+    --shadow:0 1px 2px rgba(37,29,21,0.07), 0 6px 16px rgba(37,29,21,0.06);
+    --radius:3px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    background-image:radial-gradient(circle at 1px 1px, rgba(37,29,21,0.035) 1px, transparent 0);
+    background-size:22px 22px;
+    color:var(--ink);
+    font-family:'Vollkorn',serif;
+    line-height:1.45;
+    padding:28px 20px 60px;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+  header.top{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:16px;padding-bottom:20px;margin-bottom:22px;
+    border-bottom:2px solid var(--ink);
+  }
+  .brand{display:flex;align-items:center;gap:14px;}
+  .stamp{
+    width:52px;height:52px;border-radius:50%;
+    border:2.5px solid var(--brand);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Oswald',sans-serif;font-weight:700;font-size:15px;
+    color:var(--brand);letter-spacing:0.5px;flex:none;transform:rotate(-6deg);
+  }
+  .brand-text h1{
+    font-family:'Oswald',sans-serif;font-weight:700;font-size:22px;
+    letter-spacing:1.5px;text-transform:uppercase;margin:0;color:var(--ink);
+  }
+  .brand-text p{
+    margin:2px 0 0;font-size:12px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--ink-soft);font-weight:500;
+  }
+  .backlink{
+    font-family:'Oswald',sans-serif;font-weight:600;font-size:12px;letter-spacing:1px;
+    text-transform:uppercase;color:var(--brand);text-decoration:none;
+    border:1px solid var(--rule);border-radius:var(--radius);padding:8px 14px;background:var(--surface);
+  }
+  .backlink:hover{border-color:var(--brand);}
+  .section-title{
+    font-family:'Oswald',sans-serif;font-weight:600;font-size:13px;
+    letter-spacing:2px;text-transform:uppercase;color:var(--ink-soft);
+    margin:0 0 12px;display:flex;align-items:center;gap:10px;
+  }
+  .section-title::after{content:'';flex:1;height:1px;background:var(--rule);}
+  .panel{
+    background:var(--surface);border:1px solid var(--rule);border-radius:var(--radius);
+    padding:20px;box-shadow:var(--shadow);position:relative;margin-bottom:26px;
+  }
+  .panel::before{
+    content:'';position:absolute;top:-1px;left:-1px;width:14px;height:14px;background:var(--paper);
+    clip-path:polygon(0 0, 100% 0, 0 100%);border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  }
+  .empty-state{color:var(--ink-soft);font-size:14px;padding:30px 10px;text-align:center;}
+  .empty-state a{color:var(--brand);}
+
+  .chart-svg{display:block;width:100%;height:auto;}
+  .chart-svg .gridline{stroke:var(--rule);stroke-width:1;}
+  .chart-svg .axislabel{font-family:'IBM Plex Mono',monospace;font-size:10px;fill:var(--ink-soft);}
+  .chart-svg .xlabel{font-family:'IBM Plex Mono',monospace;font-size:9.5px;fill:var(--ink-soft);}
+  .chart-svg .line{fill:none;stroke:var(--brand);stroke-width:2.5;}
+  .chart-svg .dot{fill:var(--brand);}
+  .chart-svg .dot:hover{fill:var(--rust);}
+
+  table.weekly{width:100%;border-collapse:collapse;font-size:13.5px;}
+  table.weekly th{
+    text-align:left;font-family:'Oswald',sans-serif;font-weight:600;font-size:11px;
+    letter-spacing:1px;text-transform:uppercase;color:var(--ink-soft);
+    padding:10px 12px;border-bottom:2px solid var(--ink);
+  }
+  table.weekly td{
+    padding:9px 12px;border-bottom:1px solid var(--rule);
+    font-family:'IBM Plex Mono',monospace;color:var(--ink);
+  }
+  table.weekly td.wk{font-family:'Vollkorn',serif;color:var(--ink-soft);}
+  table.weekly tr:last-child td{color:var(--ink-faint);font-style:italic;}
+  table.weekly tr:hover td{background:var(--surface-2);}
+
+  footer{margin-top:22px;text-align:center;font-size:11.5px;color:var(--ink-faint);}
+
+  @media (max-width:640px){
+    header.top{flex-direction:column;align-items:flex-start;gap:12px;}
+    table.weekly{font-size:12px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <div class="stamp">4DR</div>
+      <div class="brand-text">
+        <h1>4 Diamond Ranch</h1>
+        <p>Weekly Sales History</p>
+      </div>
+    </div>
+    <a class="backlink" href="index.html">← Back to Dashboard</a>
+  </header>
+
+  <div id="content"></div>
+
+  <footer>Runs entirely in this browser, reading the same locally stored data as the main dashboard.</footer>
+</div>
+
+<script>
+const LS_PREFIX = '4dr_';
+function loadJSON(key, fallback){
+  try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+  catch(e){ return fallback; }
+}
+const totalSales = loadJSON(LS_PREFIX+'total_sales', []);
+const settings = loadJSON(LS_PREFIX+'settings', {weekStartsOn:1});
+const weekStartsOn = settings.weekStartsOn==null ? 1 : settings.weekStartsOn;
+
+function fmtCurrency0(n){ return '$'+Math.round(n||0).toLocaleString('en-US'); }
+function fmtNumber(n){ return Number(n||0).toLocaleString('en-US'); }
+function escapeHTML(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function addDaysISO(iso,n){
+  const [y,m,d] = iso.split('-').map(Number);
+  const dt = new Date(y,m-1,d);
+  dt.setDate(dt.getDate()+n);
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+}
+function todayISO(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function startOfWeekISO(iso, weekStartsOn){
+  const [y,m,d] = iso.split('-').map(Number);
+  const dt = new Date(y,m-1,d);
+  const day = dt.getDay();
+  let diff = day - weekStartsOn;
+  if (diff<0) diff += 7;
+  dt.setDate(dt.getDate()-diff);
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+}
+function fmtShort(iso){
+  return new Date(iso+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+
+function buildWeeklySeries(){
+  if (!totalSales.length) return [];
+  const minDate = totalSales.reduce((m,r)=>(!m||r.date<m)?r.date:m, null);
+  const yesterday = addDaysISO(todayISO(),-1);
+  const maxDate = totalSales.reduce((m,r)=>(!m||r.date>m)?r.date:m, null);
+  const end = maxDate < yesterday ? maxDate : yesterday; // never show today's partial day
+  const byDate = {};
+  for (const r of totalSales) byDate[r.date] = r;
+
+  const weeks = [];
+  let wStart = startOfWeekISO(minDate, weekStartsOn);
+  while (wStart <= end){
+    let wEnd = addDaysISO(wStart,6);
+    if (wEnd > end) wEnd = end;
+    let revenue=0, orders=0;
+    let d = wStart;
+    while (d <= wEnd){
+      const row = byDate[d];
+      if (row){ revenue += row.totalSales; orders += row.orders; }
+      d = addDaysISO(d,1);
+    }
+    const isPartialWeek = (addDaysISO(wStart,6) > end);
+    weeks.push({start:wStart, end:wEnd, revenue, orders, isPartialWeek});
+    wStart = addDaysISO(wStart,7);
+  }
+  return weeks;
+}
+
+function lineChartSVG(weeks){
+  const w = 1100, h = 320, padL = 60, padR = 20, padT = 20, padB = 46;
+  const vals = weeks.map(wk=>wk.revenue);
+  const maxV = Math.max(...vals, 1);
+  const plotW = w - padL - padR, plotH = h - padT - padB;
+  const stepX = weeks.length>1 ? plotW/(weeks.length-1) : 0;
+  const xy = weeks.map((wk,i)=>{
+    const x = padL + i*stepX;
+    const y = padT + plotH - (wk.revenue/maxV)*plotH;
+    return [x,y];
+  });
+  const path = xy.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+
+  const gridCount = 4;
+  let gridlines = '';
+  for (let i=0;i<=gridCount;i++){
+    const gy = padT + plotH - (i/gridCount)*plotH;
+    const gv = (maxV/gridCount)*i;
+    gridlines += `<line class="gridline" x1="${padL}" y1="${gy.toFixed(1)}" x2="${w-padR}" y2="${gy.toFixed(1)}"/>`;
+    gridlines += `<text class="axislabel" x="${padL-8}" y="${(gy+3).toFixed(1)}" text-anchor="end">${fmtCurrency0(gv)}</text>`;
+  }
+
+  // thin x-axis labels if there are many weeks, to avoid overlap
+  const labelEvery = weeks.length<=14 ? 1 : Math.ceil(weeks.length/14);
+  let xlabels = '';
+  weeks.forEach((wk,i)=>{
+    if (i%labelEvery!==0 && i!==weeks.length-1) return;
+    xlabels += `<text class="xlabel" x="${xy[i][0].toFixed(1)}" y="${h-padB+16}" text-anchor="middle">${fmtShort(wk.start)}</text>`;
+  });
+
+  const dots = xy.map((p,i)=>{
+    const wk = weeks[i];
+    const label = `${fmtShort(wk.start)} – ${fmtShort(wk.end)}${wk.isPartialWeek?' (partial)':''}: ${fmtCurrency0(wk.revenue)}, ${fmtNumber(wk.orders)} orders`;
+    return `<circle class="dot" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5"><title>${escapeHTML(label)}</title></circle>`;
+  }).join('');
+
+  return `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
+    ${gridlines}
+    <path class="line" d="${path}"/>
+    ${dots}
+    ${xlabels}
+  </svg>`;
+}
+
+function tableHTML(weeks){
+  const rows = weeks.map((wk,i)=>{
+    const isCurrent = i===weeks.length-1 && wk.isPartialWeek;
+    return `<tr>
+      <td class="wk">${fmtShort(wk.start)} – ${fmtShort(wk.end)}${isCurrent?' (in progress)':''}</td>
+      <td>${fmtCurrency0(wk.revenue)}</td>
+      <td>${fmtNumber(wk.orders)}</td>
+    </tr>`;
+  }).join('');
+  return `<table class="weekly">
+    <thead><tr><th>Week</th><th>Revenue</th><th>Orders</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function render(){
+  const content = document.getElementById('content');
+  const weeks = buildWeeklySeries();
+  if (!weeks.length){
+    content.innerHTML = `<div class="panel"><div class="empty-state">
+      No Total Sales data loaded yet. Go to the <a href="index.html">main dashboard</a> and
+      drop in a "Total sales over time" export first — this page reads the same data.
+    </div></div>`;
+    return;
+  }
+  content.innerHTML = `
+    <div class="panel">
+      <div class="section-title">Weekly Revenue Since Launch</div>
+      ${lineChartSVG(weeks)}
+    </div>
+    <div class="panel">
+      <div class="section-title">Week-by-Week Detail</div>
+      ${tableHTML(weeks)}
+    </div>
+  `;
+}
+render();
+</script>
+</body>
+</html>

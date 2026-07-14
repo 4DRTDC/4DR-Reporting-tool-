@@ -336,12 +336,13 @@
     <summary>Methodology &amp; data notes</summary>
     <ul>
       <li><b>Daily</b> means yesterday — the most recent fully complete day. <b>WTD</b> and <b>MTD</b> run from the start of the week/month through yesterday, so all three numbers are always "as of end of yesterday" and today's partial data never sneaks in.</li>
-      <li><b>Revenue / Orders / AOV</b> come from your Shopify "Total sales over time" export. $0 comped/gifting orders (identified from your Orders export) are subtracted from the Orders count — revenue is unaffected since those orders already net to $0.</li>
-      <li><b>Pounds</b> is computed by matching each line item in your Orders export to its weight in the Products catalog (grams ÷ 453.592). Comped and cancelled orders are excluded entirely.</li>
-      <li><b>New / Repeat Customers</b> are real counts, built by tracking each customer's email across every Orders export you've uploaded and flagging their earliest known order as "New." Comped orders don't count toward either bucket. Accuracy improves as more days accumulate — a customer with history before you started using this dashboard may show as "New" the first time they're seen here.</li>
+      <li><b>Revenue / Orders / AOV</b> come from your Shopify "Total sales over time" export. Orders placed under an excluded email address (identified from your Orders export) are subtracted from the Orders count — revenue is unaffected since Shopify's own totals already reflect what was actually charged.</li>
+      <li><b>Pounds</b> is computed by matching each line item in your Orders export to its weight in the Products catalog (grams ÷ 453.592). Orders under an excluded email, and cancelled orders, are excluded entirely.</li>
+      <li><b>New / Repeat Customers</b> are real counts, built by tracking each customer's email across every Orders export you've uploaded and flagging their earliest known order as "New." Orders under an excluded email don't count toward either bucket. Accuracy improves as more days accumulate — a customer with history before you started using this dashboard may show as "New" the first time they're seen here.</li>
       <li><b>Customer Acquisition Cost</b> = Meta ad spend for the period ÷ New Customers for the same period.</li>
       <li><b>Top Performing Ad</b> = highest number of Results (conversions) in the period, from your Meta Ads-by-day export. Ties break toward lower spend. If <i>no</i> ad converted in the period, ranking falls back to highest CTR (Link clicks ÷ Impressions), then highest Impressions, then lowest spend — so a $0 conversion count doesn't default to whichever ad happened to spend the least.</li>
-      <li><b>Top Selling Product</b> = highest units sold in the period, from your Orders export line items (grouped by product/variant name). Comped orders, cancelled orders, and "4DR GRD 15" are excluded from ranking.</li>
+      <li><b>Top Selling Product</b> = highest units sold in the period, from your Orders export line items (grouped by product/variant name). Orders under an excluded email, cancelled orders, and "4DR GRD 15" are excluded from ranking.</li>
+      <li>Orders placed under <b>hannah.tredway@fat-earth.com</b> are excluded from every metric on this dashboard.</li>
       <li>Your Orders export is a rolling window (not full history), so pounds/customer data is stored locally in this browser and merged in day over day, deduped by order number. Use <b>Backup data</b> periodically as a safety net — it saves everything to a file you can restore from.</li>
       <li>A small <sup style="color:#A97C2F">✦</sup> next to a number means the date range extends earlier than your accumulated order history — that figure may be incomplete for the earliest days in range.</li>
     </ul>
@@ -371,6 +372,10 @@ function isExcludedFromTopProduct(li){
   const name = (li.name||'').trim().toUpperCase();
   return TOP_PRODUCT_EXCLUDED.has(sku) || TOP_PRODUCT_EXCLUDED.has(name);
 }
+
+// Orders under these emails are excluded from every reporting metric (Orders, Revenue,
+// Pounds, AOV, New/Repeat Customers, Top Selling Product) -- not based on order total.
+const REPORTING_EXCLUDED_EMAILS = new Set(['hannah.tredway@fat-earth.com']);
 
 const METRIC_DEFS = [
   {key:'revenue', label:'Total Revenue', fmt:fmtCurrency0},
@@ -504,7 +509,7 @@ function parseOrdersExport(rows){
     ...o,
     date:(o.createdAt||'').split(' ')[0],
     total:o.total||0,
-    isComped:(o.total||0)===0,
+    isExcluded:REPORTING_EXCLUDED_EMAILS.has((o.email||'').trim().toLowerCase()),
     isCancelled:!!o.cancelledAt,
   }));
 }
@@ -619,16 +624,16 @@ function computeMetrics(start,end){
 
   const allValid = ordersAccumArray().filter(o=>!o.isCancelled);
   const inRange = allValid.filter(o=>o.date>=start && o.date<=end);
-  // Count every known comped order in range for the subtraction, not just non-cancelled
-  // ones -- a comped order that was later cancelled can still be in Shopify's raw order
+  // Count every known excluded order in range for the subtraction, not just non-cancelled
+  // ones -- an excluded order that was later cancelled can still be in Shopify's raw order
   // count for the day, so it must still be subtracted out here.
-  const compedCount = ordersAccumArray().filter(o=>o.isComped && o.date>=start && o.date<=end).length;
-  const orders = Math.max(rawOrders - compedCount, 0);
+  const excludedCount = ordersAccumArray().filter(o=>o.isExcluded && o.date>=start && o.date<=end).length;
+  const orders = Math.max(rawOrders - excludedCount, 0);
   const aov = orders>0 ? revenue/orders : 0;
 
   let pounds=0;
   for (const o of inRange){
-    if (o.isComped) continue;
+    if (o.isExcluded) continue;
     for (const li of o.lineItems){
       pounds += (state.catalog[li.sku]||0)*li.qty;
     }
@@ -642,7 +647,7 @@ function computeMetrics(start,end){
   }
   const newSet=new Set(), repeatSet=new Set();
   for (const o of inRange){
-    if (o.isComped || !o.email) continue;
+    if (o.isExcluded || !o.email) continue;
     if (firstSeen[o.email]===o.date) newSet.add(o.email); else repeatSet.add(o.email);
   }
   const newCustomers = newSet.size;
@@ -681,7 +686,7 @@ function computeMetrics(start,end){
 
   const productTotals = {};
   for (const o of inRange){
-    if (o.isComped) continue;
+    if (o.isExcluded) continue;
     for (const li of o.lineItems){
       if (isExcludedFromTopProduct(li)) continue;
       const key = li.name || li.sku;

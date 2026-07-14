@@ -51,7 +51,10 @@ dashboard itself — worth a read once. Short version:
   These get more accurate the longer you've been using the dashboard, since they only know
   about orders from the point you started uploading forward. A small ✦ marks numbers where
   the date range reaches further back than your accumulated order history.
-- Top Performing Ad is ranked by Results (orders/conversions), not spend or ROAS.
+- Top Performing Ad is ranked by Results (orders/conversions), not spend or ROAS. If nothing
+  converted in the period, it falls back to CTR, then Impressions, then lowest spend — add a
+  **Link Clicks** column to your Meta export (alongside Impressions) so CTR can be computed;
+  without it, the fallback skips straight to Impressions.
 
 ## Starting over
 

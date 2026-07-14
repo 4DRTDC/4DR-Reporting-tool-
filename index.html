@@ -619,7 +619,10 @@ function computeMetrics(start,end){
 
   const allValid = ordersAccumArray().filter(o=>!o.isCancelled);
   const inRange = allValid.filter(o=>o.date>=start && o.date<=end);
-  const compedCount = inRange.filter(o=>o.isComped).length;
+  // Count every known comped order in range for the subtraction, not just non-cancelled
+  // ones -- a comped order that was later cancelled can still be in Shopify's raw order
+  // count for the day, so it must still be subtracted out here.
+  const compedCount = ordersAccumArray().filter(o=>o.isComped && o.date>=start && o.date<=end).length;
   const orders = Math.max(rawOrders - compedCount, 0);
   const aov = orders>0 ? revenue/orders : 0;
 

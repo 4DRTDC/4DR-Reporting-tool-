@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Vollkorn:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{
     --paper:#ECE4D3;
@@ -85,20 +87,41 @@
   .chart-svg .line{fill:none;stroke:var(--brand);stroke-width:2.5;}
   .chart-svg .dot{fill:var(--brand);}
   .chart-svg .dot:hover{fill:var(--rust);}
+  .chart-svg .ivline{stroke:var(--rust);stroke-width:1.25;stroke-dasharray:3,3;opacity:0.5;}
+  .chart-svg .ivdot{fill:var(--rust);opacity:0.92;}
+  .chart-svg .ivnum{font-family:'IBM Plex Mono',monospace;font-size:8.5px;fill:#fff;font-weight:600;pointer-events:none;}
 
-  table.weekly{width:100%;border-collapse:collapse;font-size:13.5px;}
+  table.weekly{width:100%;border-collapse:collapse;font-size:13px;}
   table.weekly th{
-    text-align:left;font-family:'Oswald',sans-serif;font-weight:600;font-size:11px;
-    letter-spacing:1px;text-transform:uppercase;color:var(--ink-soft);
-    padding:10px 12px;border-bottom:2px solid var(--ink);
+    text-align:left;font-family:'Oswald',sans-serif;font-weight:600;font-size:10.5px;
+    letter-spacing:0.8px;text-transform:uppercase;color:var(--ink-soft);
+    padding:10px 10px;border-bottom:2px solid var(--ink);
   }
   table.weekly td{
-    padding:9px 12px;border-bottom:1px solid var(--rule);
-    font-family:'IBM Plex Mono',monospace;color:var(--ink);
+    padding:9px 10px;border-bottom:1px solid var(--rule);
+    font-family:'IBM Plex Mono',monospace;color:var(--ink);white-space:nowrap;
   }
-  table.weekly td.wk{font-family:'Vollkorn',serif;color:var(--ink-soft);}
+  table.weekly td.wk{font-family:'Vollkorn',serif;color:var(--ink-soft);white-space:normal;}
   table.weekly tr:last-child td{color:var(--ink-faint);font-style:italic;}
   table.weekly tr:hover td{background:var(--surface-2);}
+  .table-scroll{overflow-x:auto;}
+  .table-note{font-size:11.5px;color:var(--ink-faint);margin-top:10px;}
+
+  .btn{
+    border:1px solid var(--rule);background:var(--surface);color:var(--ink);
+    padding:6px 13px;border-radius:var(--radius);font-size:12px;cursor:pointer;
+    font-family:'Vollkorn',serif;font-weight:500;display:inline-block;
+  }
+  .btn:hover{border-color:var(--brand);}
+
+  .ivlist{list-style:none;margin:0;padding:0;display:grid;gap:8px;}
+  .ivlist li{font-size:13px;color:var(--ink-soft);display:flex;align-items:baseline;gap:10px;}
+  .ivbadge{
+    flex:none;width:18px;height:18px;border-radius:50%;background:var(--rust);color:#fff;
+    font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;
+    display:inline-flex;align-items:center;justify-content:center;
+  }
+  .ivlist b{color:var(--ink);}
 
   footer{margin-top:22px;text-align:center;font-size:11.5px;color:var(--ink-faint);}
 
@@ -119,7 +142,10 @@
         <p>Weekly Sales History</p>
       </div>
     </div>
-    <a class="backlink" href="index.html">← Back to Dashboard</a>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button class="btn" id="downloadPngBtn">Download PNG</button>
+      <a class="backlink" href="index.html">← Back to Dashboard</a>
+    </div>
   </header>
 
   <div id="content"></div>
@@ -129,15 +155,44 @@
 
 <script>
 const LS_PREFIX = '4dr_';
+const KEYS = {
+  totalSales: LS_PREFIX+'total_sales',
+  ordersAccum: LS_PREFIX+'orders_accum',
+  metaAds: LS_PREFIX+'meta_ads',
+  settings: LS_PREFIX+'settings',
+  sessions: LS_PREFIX+'weekly_sessions',
+};
+
+// Same exclusion list as the main dashboard -- keep in sync with index.html.
+const REPORTING_EXCLUDED_EMAILS = new Set(['hannah.tredway@fat-earth.com', 'tcawdrey@fourdiamondranch.com']);
+
+const INTERVENTIONS = [
+  {date:'2026-04-14', label:'Website update'},
+  {date:'2026-04-18', label:'Expansion to CA and AZ'},
+  {date:'2026-05-22', label:'Launched lifecycle'},
+  {date:'2026-06-12', label:'Killed Google'},
+  {date:'2026-06-25', label:'Removed minimum order value (a la carte)'},
+  {date:'2026-07-01', label:'Dropped price 10%'},
+  {date:'2026-07-08', label:'Dropped price 20%'},
+].map((d,i)=>({...d, n:i+1}));
+
 function loadJSON(key, fallback){
   try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
   catch(e){ return fallback; }
 }
-const totalSales = loadJSON(LS_PREFIX+'total_sales', []);
-const settings = loadJSON(LS_PREFIX+'settings', {weekStartsOn:1});
+function saveJSON(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+
+const totalSales = loadJSON(KEYS.totalSales, []);
+const ordersAccumObj = loadJSON(KEYS.ordersAccum, {});
+const metaAds = loadJSON(KEYS.metaAds, {});
+const settings = loadJSON(KEYS.settings, {weekStartsOn:1});
+let sessionsData = loadJSON(KEYS.sessions, []);
 const weekStartsOn = settings.weekStartsOn==null ? 1 : settings.weekStartsOn;
 
+function ordersAccumArray(){ return Object.values(ordersAccumObj); }
+
 function fmtCurrency0(n){ return '$'+Math.round(n||0).toLocaleString('en-US'); }
+function fmtCurrency2(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtNumber(n){ return Number(n||0).toLocaleString('en-US'); }
 function escapeHTML(s){
   return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -164,7 +219,13 @@ function startOfWeekISO(iso, weekStartsOn){
 function fmtShort(iso){
   return new Date(iso+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
 }
+function daysBetween(a,b){
+  const [ay,am,ad] = a.split('-').map(Number);
+  const [by,bm,bd] = b.split('-').map(Number);
+  return Math.round((new Date(by,bm-1,bd) - new Date(ay,am-1,ad))/86400000);
+}
 
+/* ================= Weekly series ================= */
 function buildWeeklySeries(){
   if (!totalSales.length) return [];
   const minDate = totalSales.reduce((m,r)=>(!m||r.date<m)?r.date:m, null);
@@ -173,38 +234,103 @@ function buildWeeklySeries(){
   const end = maxDate < yesterday ? maxDate : yesterday; // never show today's partial day
   const byDate = {};
   for (const r of totalSales) byDate[r.date] = r;
+  const sessByDate = {};
+  for (const s of sessionsData) sessByDate[s.date] = (sessByDate[s.date]||0) + (s.sessions||0);
+
+  const allOrders = ordersAccumArray();
+  const allValid = allOrders.filter(o=>!o.isCancelled);
+  const firstSeen = {};
+  for (const o of allValid){
+    if (!o.email) continue;
+    if (!firstSeen[o.email] || o.date<firstSeen[o.email]) firstSeen[o.email]=o.date;
+  }
+  const earliestOrderDate = allValid.reduce((m,o)=>(!m||o.date<m)?o.date:m, null);
 
   const weeks = [];
   let wStart = startOfWeekISO(minDate, weekStartsOn);
   while (wStart <= end){
     let wEnd = addDaysISO(wStart,6);
     if (wEnd > end) wEnd = end;
-    let revenue=0, orders=0;
+
+    let revenue=0, rawOrders=0, sessions=0, adSpend=0;
     let d = wStart;
     while (d <= wEnd){
       const row = byDate[d];
-      if (row){ revenue += row.totalSales; orders += row.orders; }
+      if (row){ revenue += row.totalSales; rawOrders += row.orders; }
+      sessions += sessByDate[d]||0;
+      const dayAds = metaAds[d];
+      if (dayAds){ for (const name of Object.keys(dayAds)) adSpend += dayAds[name].spend||0; }
       d = addDaysISO(d,1);
     }
+
+    const excludedCount = allOrders.filter(o=>o.isExcluded && o.date>=wStart && o.date<=wEnd).length;
+    const orders = Math.max(rawOrders - excludedCount, 0);
+
+    const inRangeValid = allValid.filter(o=>o.date>=wStart && o.date<=wEnd);
+    let newOrders=0, repeatOrders=0;
+    const newEmails = new Set();
+    for (const o of inRangeValid){
+      if (o.isExcluded || !o.email) continue;
+      if (firstSeen[o.email]===o.date){ newOrders++; newEmails.add(o.email); }
+      else repeatOrders++;
+    }
+    const cac = newEmails.size>0 ? adSpend/newEmails.size : null;
+    const conversionPct = sessions>0 ? (orders/sessions)*100 : null;
+
     const isPartialWeek = (addDaysISO(wStart,6) > end);
-    weeks.push({start:wStart, end:wEnd, revenue, orders, isPartialWeek});
+    const isDataPartial = !!(earliestOrderDate && wStart<earliestOrderDate);
+
+    weeks.push({start:wStart, end:wEnd, revenue, orders, newOrders, repeatOrders, cac, adSpend, sessions, conversionPct, isPartialWeek, isDataPartial});
     wStart = addDaysISO(wStart,7);
   }
   return weeks;
 }
 
-function lineChartSVG(weeks){
-  const w = 1100, h = 320, padL = 60, padR = 20, padT = 20, padB = 46;
-  const vals = weeks.map(wk=>wk.revenue);
-  const maxV = Math.max(...vals, 1);
-  const plotW = w - padL - padR, plotH = h - padT - padB;
+/* ================= Intervention overlay ================= */
+function xForDate(dateISO, weeks, padL, stepX){
+  if (!weeks.length) return null;
+  if (dateISO < weeks[0].start || dateISO > weeks[weeks.length-1].end) return null;
+  const idx = weeks.findIndex(wk=>dateISO>=wk.start && dateISO<=wk.end);
+  if (idx===-1) return null;
+  const frac = daysBetween(weeks[idx].start, dateISO)/7;
+  return padL + (idx+frac)*stepX;
+}
+
+function interventionOverlaySVG(weeks, padL, padT, padB, h, stepX){
+  let out = '';
+  for (const iv of INTERVENTIONS){
+    const x = xForDate(iv.date, weeks, padL, stepX);
+    if (x==null) continue;
+    const title = `${iv.n}. ${fmtShort(iv.date)} — ${iv.label}`;
+    out += `<line class="ivline" x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${h-padB}"><title>${escapeHTML(title)}</title></line>`;
+    out += `<circle class="ivdot" cx="${x.toFixed(1)}" cy="${(padT+9).toFixed(1)}" r="7.5"><title>${escapeHTML(title)}</title></circle>`;
+    out += `<text class="ivnum" x="${x.toFixed(1)}" y="${(padT+12.5).toFixed(1)}" text-anchor="middle">${iv.n}</text>`;
+  }
+  return out;
+}
+
+/* ================= Chart ================= */
+function metricChartSVG(weeks, opts){
+  const w=1100, h=320, padL=60, padR=20, padT=30, padB=46;
+  const plotW = w-padL-padR, plotH = h-padT-padB;
   const stepX = weeks.length>1 ? plotW/(weeks.length-1) : 0;
+
+  const vals = weeks.map(opts.valueFn).filter(v=>v!=null);
+  const maxV = Math.max(...vals, 1);
+
   const xy = weeks.map((wk,i)=>{
+    const v = opts.valueFn(wk);
     const x = padL + i*stepX;
-    const y = padT + plotH - (wk.revenue/maxV)*plotH;
-    return [x,y];
+    const y = v==null ? null : padT + plotH - (v/maxV)*plotH;
+    return {x,y,v};
   });
-  const path = xy.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+
+  let path='', started=false;
+  xy.forEach(p=>{
+    if (p.y==null){ started=false; return; }
+    path += (started?'L':'M')+p.x.toFixed(1)+','+p.y.toFixed(1)+' ';
+    started = true;
+  });
 
   const gridCount = 4;
   let gridlines = '';
@@ -212,46 +338,166 @@ function lineChartSVG(weeks){
     const gy = padT + plotH - (i/gridCount)*plotH;
     const gv = (maxV/gridCount)*i;
     gridlines += `<line class="gridline" x1="${padL}" y1="${gy.toFixed(1)}" x2="${w-padR}" y2="${gy.toFixed(1)}"/>`;
-    gridlines += `<text class="axislabel" x="${padL-8}" y="${(gy+3).toFixed(1)}" text-anchor="end">${fmtCurrency0(gv)}</text>`;
+    gridlines += `<text class="axislabel" x="${padL-8}" y="${(gy+3).toFixed(1)}" text-anchor="end">${opts.fmt(gv)}</text>`;
   }
 
-  // thin x-axis labels if there are many weeks, to avoid overlap
   const labelEvery = weeks.length<=14 ? 1 : Math.ceil(weeks.length/14);
   let xlabels = '';
   weeks.forEach((wk,i)=>{
     if (i%labelEvery!==0 && i!==weeks.length-1) return;
-    xlabels += `<text class="xlabel" x="${xy[i][0].toFixed(1)}" y="${h-padB+16}" text-anchor="middle">${fmtShort(wk.start)}</text>`;
+    xlabels += `<text class="xlabel" x="${xy[i].x.toFixed(1)}" y="${h-padB+16}" text-anchor="middle">${fmtShort(wk.start)}</text>`;
   });
 
   const dots = xy.map((p,i)=>{
+    if (p.y==null) return '';
     const wk = weeks[i];
-    const label = `${fmtShort(wk.start)} – ${fmtShort(wk.end)}${wk.isPartialWeek?' (partial)':''}: ${fmtCurrency0(wk.revenue)}, ${fmtNumber(wk.orders)} orders`;
-    return `<circle class="dot" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5"><title>${escapeHTML(label)}</title></circle>`;
+    const label = `${fmtShort(wk.start)} – ${fmtShort(wk.end)}${wk.isPartialWeek?' (partial)':''}: ${opts.fmt(p.v)}`;
+    return `<circle class="dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5"><title>${escapeHTML(label)}</title></circle>`;
   }).join('');
+
+  const overlay = interventionOverlaySVG(weeks, padL, padT, padB, h, stepX);
 
   return `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
     ${gridlines}
-    <path class="line" d="${path}"/>
+    ${overlay}
+    <path class="line" d="${path.trim()}"/>
     ${dots}
     ${xlabels}
   </svg>`;
 }
 
+/* ================= Table ================= */
 function tableHTML(weeks){
   const rows = weeks.map((wk,i)=>{
     const isCurrent = i===weeks.length-1 && wk.isPartialWeek;
+    const mark = wk.isDataPartial ? '<sup style="color:#A97C2F">✦</sup>' : '';
     return `<tr>
       <td class="wk">${fmtShort(wk.start)} – ${fmtShort(wk.end)}${isCurrent?' (in progress)':''}</td>
       <td>${fmtCurrency0(wk.revenue)}</td>
       <td>${fmtNumber(wk.orders)}</td>
+      <td>${fmtNumber(wk.newOrders)}${mark}</td>
+      <td>${fmtNumber(wk.repeatOrders)}${mark}</td>
+      <td>${wk.cac==null?'—':fmtCurrency2(wk.cac)}${mark}</td>
+      <td>${wk.conversionPct==null?'—':wk.conversionPct.toFixed(2)+'%'}</td>
     </tr>`;
   }).join('');
-  return `<table class="weekly">
-    <thead><tr><th>Week</th><th>Revenue</th><th>Orders</th></tr></thead>
+  return `<div class="table-scroll"><table class="weekly">
+    <thead><tr><th>Week</th><th>Net Revenue</th><th>Orders</th><th>New Orders</th><th>Repeat Orders</th><th>CAC</th><th>Conv. %</th></tr></thead>
     <tbody>${rows}</tbody>
-  </table>`;
+  </table></div>
+  <p class="table-note"><sup style="color:#A97C2F">✦</sup> New/Repeat Orders and CAC may be incomplete for weeks before your accumulated Orders export history began.</p>`;
 }
 
+/* ================= Conversion % upload (one-time) ================= */
+function conversionUploadHTML(){
+  return `<div class="empty-state" style="padding:16px 10px;">
+    Drop in a Shopify <b>Sessions over time</b> export (Analytics → Reports, columns "Day" and
+    "Sessions") to compute Conversion % for these weeks. One-time upload — stored locally like
+    everything else on this page.
+    <div style="margin-top:14px;">
+      <label class="btn" for="sessionsInput">Upload Sessions CSV</label>
+      <input type="file" id="sessionsInput" accept=".csv" style="display:none;">
+    </div>
+    <div id="sessionsMsg" style="margin-top:10px;font-size:12px;color:var(--ink-soft);"></div>
+  </div>`;
+}
+
+function wireConversionUpload(){
+  const input = document.getElementById('sessionsInput');
+  if (!input) return;
+  input.addEventListener('change', async e=>{
+    const file = e.target.files[0];
+    if (!file) return;
+    const msgEl = document.getElementById('sessionsMsg');
+    try{
+      const text = await new Promise((resolve,reject)=>{
+        const r = new FileReader();
+        r.onload = ()=>resolve(r.result);
+        r.onerror = reject;
+        r.readAsText(file);
+      });
+      const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+      const fields = parsed.meta.fields||[];
+      const dayKey = fields.find(f=>/^(day|date)$/i.test(f.trim()));
+      const sessKey = fields.find(f=>/sessions?/i.test(f));
+      if (!dayKey || !sessKey){
+        msgEl.textContent = `⚠ Could not find Day/Sessions columns in "${file.name}".`;
+        return;
+      }
+      const out = [];
+      for (const row of parsed.data){
+        const day = row[dayKey];
+        if (!day) continue;
+        out.push({date:day, sessions:Number(row[sessKey])||0});
+      }
+      sessionsData = out;
+      saveJSON(KEYS.sessions, sessionsData);
+      render();
+    }catch(err){
+      msgEl.textContent = `⚠ Error reading file: ${err.message}`;
+    }
+  });
+}
+
+/* ================= Interventions CSV download ================= */
+function csvEscape(v){
+  const s = String(v);
+  return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+function downloadInterventionsCSV(){
+  const header = ['#','Date','Intervention'];
+  const rows = INTERVENTIONS.map(iv=>[iv.n, iv.date, iv.label]);
+  const csv = [header, ...rows].map(r=>r.map(csvEscape).join(',')).join('\r\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'marketing-interventions.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function wireInterventionsDownload(){
+  const btn = document.getElementById('downloadIvBtn');
+  if (btn) btn.addEventListener('click', downloadInterventionsCSV);
+}
+
+/* ================= Whole-page PNG download ================= */
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function canvasToPNG(canvas, filename){
+  return new Promise(resolve=>{
+    canvas.toBlob(blob=>{
+      downloadBlob(blob, filename);
+      resolve();
+    }, 'image/png');
+  });
+}
+async function downloadPageAsPNG(){
+  const btn = document.getElementById('downloadPngBtn');
+  const zone = document.querySelector('.wrap');
+  const originalLabel = btn ? btn.textContent : null;
+  if (btn){ btn.disabled = true; btn.textContent = 'Rendering…'; }
+  try{
+    const canvas = await html2canvas(zone, {backgroundColor:'#ECE4D3', scale:2});
+    await canvasToPNG(canvas, `4dr-weekly-sales-history-${todayISO()}.png`);
+  } finally {
+    if (btn){ btn.disabled = false; btn.textContent = originalLabel; }
+  }
+}
+function wirePngDownload(){
+  const btn = document.getElementById('downloadPngBtn');
+  if (btn) btn.addEventListener('click', downloadPageAsPNG);
+}
+
+/* ================= Render ================= */
 function render(){
   const content = document.getElementById('content');
   const weeks = buildWeeklySeries();
@@ -262,18 +508,58 @@ function render(){
     </div></div>`;
     return;
   }
-  content.innerHTML = `
+
+  let html = `
     <div class="panel">
-      <div class="section-title">Weekly Revenue Since Launch</div>
-      ${lineChartSVG(weeks)}
+      <div class="section-title">Marketing Interventions (overlaid on each chart below)</div>
+      <ul class="ivlist">
+        ${INTERVENTIONS.map(iv=>`<li><span class="ivbadge">${iv.n}</span> <b>${fmtShort(iv.date)}</b> — ${escapeHTML(iv.label)}</li>`).join('')}
+      </ul>
+      <div style="margin-top:14px;">
+        <button class="btn" id="downloadIvBtn">Download CSV</button>
+      </div>
     </div>
+  `;
+
+  const panels = [
+    {title:'Net Revenue', valueFn:wk=>wk.revenue, fmt:fmtCurrency0},
+    {title:'Number of Orders', valueFn:wk=>wk.orders, fmt:fmtNumber},
+    {title:'New Customer Orders', valueFn:wk=>wk.newOrders, fmt:fmtNumber},
+    {title:'Repeat Customer Orders', valueFn:wk=>wk.repeatOrders, fmt:fmtNumber},
+    {title:'Customer Acquisition Cost (CAC)', valueFn:wk=>wk.cac, fmt:v=>v==null?'—':fmtCurrency2(v)},
+  ];
+
+  html += panels.map(p=>`
+    <div class="panel">
+      <div class="section-title">${escapeHTML(p.title)}</div>
+      ${metricChartSVG(weeks, p)}
+    </div>
+  `).join('');
+
+  const hasSessions = sessionsData.length>0;
+  html += `
+    <div class="panel">
+      <div class="section-title">Conversion %</div>
+      ${hasSessions
+        ? metricChartSVG(weeks, {valueFn:wk=>wk.conversionPct, fmt:v=>v.toFixed(1)+'%'})
+        : conversionUploadHTML()}
+    </div>
+  `;
+
+  html += `
     <div class="panel">
       <div class="section-title">Week-by-Week Detail</div>
       ${tableHTML(weeks)}
     </div>
   `;
+
+  content.innerHTML = html;
+  wireConversionUpload();
+  wireInterventionsDownload();
 }
+
 render();
+wirePngDownload();
 </script>
 </body>
 </html>

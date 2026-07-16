@@ -716,6 +716,11 @@ function rangeLabelStr(start,end){
   return start===end ? start : `${start} → ${end}`;
 }
 
+function fmtDateMDY(iso){
+  const [y,m,d] = iso.split('-');
+  return `${m}/${d}/${y}`;
+}
+
 function getColumnsForMode(modeOverride, compareTypeOverride){
   const mode = modeOverride || viewState.mode;
   const compareType = compareTypeOverride || viewState.compareType;
@@ -743,9 +748,11 @@ function getColumnsForMode(modeOverride, compareTypeOverride){
     }
     const curM = computeMetrics(curStart,curEnd);
     const prevM = computeMetrics(prevStart,prevEnd);
+    const curSub = compareType==='ydayVsPrior' ? fmtDateMDY(curStart) : rangeLabelStr(curStart,curEnd);
+    const prevSub = compareType==='ydayVsPrior' ? fmtDateMDY(prevStart) : rangeLabelStr(prevStart,prevEnd);
     return [
-      {label:curLabel, sub:rangeLabelStr(curStart,curEnd), metrics:curM},
-      {label:prevLabel, sub:rangeLabelStr(prevStart,prevEnd), metrics:prevM},
+      {label:curLabel, sub:curSub, metrics:curM},
+      {label:prevLabel, sub:prevSub, metrics:prevM},
       {label:'Change', isDelta:true, from:prevM, to:curM},
     ];
   }
@@ -958,13 +965,14 @@ async function downloadDailyReport(){
   const standardCols = getColumnsForMode('standard');
   const ydayCols = getColumnsForMode('compare','ydayVsPrior');
   const weekCols = getColumnsForMode('compare','weekVsLast');
+  const ydayTitle = `Compare: ${ydayCols[0].label} (${ydayCols[0].sub}) vs ${ydayCols[1].label} (${ydayCols[1].sub})`;
 
   const container = document.createElement('div');
   container.style.cssText = 'position:absolute;left:-9999px;top:0;width:1180px;background:#ECE4D3;padding:28px;font-family:Vollkorn,serif;';
   container.innerHTML = `
     <div class="section-title" style="margin-top:0;">4 Diamond Ranch — Daily Report — ${reportDate}</div>
     ${metricsSectionHTML('Standard (Daily / WTD / MTD)', standardCols)}
-    ${metricsSectionHTML('Compare: Yesterday vs Day Before', ydayCols)}
+    ${metricsSectionHTML(ydayTitle, ydayCols)}
     ${metricsSectionHTML('Compare: This Week vs Last Week', weekCols)}
   `;
   document.body.appendChild(container);
